@@ -1,10 +1,10 @@
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text,SafeAreaView } from "react-native";
 
 export default function NGOProfileScreen() {
     return (
-        <View>
+        <SafeAreaView>
             <Text>NGO Profile Screen</Text>
-        </View>
+        </SafeAreaView>
     );
 }

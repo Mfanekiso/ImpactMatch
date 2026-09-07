@@ -31,12 +31,15 @@ export default function NGOSetupScreen({ navigation }) {
             return;
         }
 
-        navigation.navigate("NGOHome", {
-            organisationName,
-            mission,
-            location,
-            fundingRequired,
-            targetCommunity,
+        navigation.navigate('MainTabs', {
+            screen: 'Home',
+            params: {
+                organisationName,
+                mission,
+                location,
+                fundingRequired,
+                targetCommunity,
+            },
         });
     };
 

@@ -57,7 +57,7 @@ export default function NGOHomeScreen({ navigation, route }) {
 
                 <TouchableOpacity
                     onPress={() =>
-                        navigation.navigate("NGOProfile", {
+                        navigation.navigate("Profile", {
                             organisationName,
                             location,
                             fundingRequired,
@@ -112,6 +112,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                         navigation.navigate("SponsorSearch")
                     }
                 >
+
                     <Text style={styles.actionTitle}>
                         Find Sponsors
                     </Text>
