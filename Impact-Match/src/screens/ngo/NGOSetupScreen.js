@@ -7,7 +7,27 @@ import {
     StyleSheet,
     ScrollView,
     Alert,
+    SafeAreaView,
+    StatusBar,
+    KeyboardAvoidingView,
+    Platform,
+    TouchableWithoutFeedback,
+    Keyboard,
 } from "react-native";
+import Ionicons from '@react-native-vector-icons/ionicons'
+
+const COLORS = {
+    background: "#FFFFFF",
+    surface: "#FFFFFF",
+    surfaceFocused: "#F9FAFB",
+    border: "#E5E7EB",
+    primary: "#10B981", // emerald green
+    primaryLight: "rgba(16, 185, 129, 0.10)",
+    textPrimary: "#0F172A",
+    textSecondary: "#64748B",
+    placeholder: "#94A3B8",
+    white: "#FFFFFF",
+};
 
 export default function NGOSetupScreen({ navigation }) {
     const [organisationName, setOrganisationName] = useState("");
@@ -15,6 +35,7 @@ export default function NGOSetupScreen({ navigation }) {
     const [location, setLocation] = useState("");
     const [fundingRequired, setFundingRequired] = useState("");
     const [targetCommunity, setTargetCommunity] = useState("");
+    const [focusedField, setFocusedField] = useState(null);
 
     const handleContinue = () => {
         if (
@@ -44,132 +65,384 @@ export default function NGOSetupScreen({ navigation }) {
     };
 
     return (
-        <ScrollView
-            contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
-        >
-            <View style={styles.container}>
-                <Text style={styles.title}>
-                    Tell us about your organisation
-                </Text>
+        <SafeAreaView style={styles.safeArea}>
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-                <Text style={styles.subtitle}>
-                    Complete your profile to help us find suitable sponsors.
-                </Text>
+            <KeyboardAvoidingView
+                style={styles.flex}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <ScrollView
+                        contentContainerStyle={styles.scrollContent}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                        bounces={true}
+                    >
+                        {/* Step Indicator — Step 3 active */}
+                        <View style={styles.stepperContainer}>
+                            {/* Step 1 */}
+                            <View style={[styles.stepCircle, styles.stepActive]}>
+                                <Text style={styles.stepTextActive}>1</Text>
+                            </View>
+                            <View style={styles.stepLine} />
 
-                <Text style={styles.label}>Organisation Name</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter organisation name"
-                    value={organisationName}
-                    onChangeText={setOrganisationName}
-                />
+                            {/* Step 2 */}
+                            <View style={[styles.stepCircle, styles.stepActive]}>
+                                <Text style={styles.stepTextActive}>2</Text>
+                            </View>
+                            <View style={styles.stepLine} />
 
-                <Text style={styles.label}>Mission</Text>
-                <TextInput
-                    style={[styles.input, styles.multilineInput]}
-                    placeholder="What is your organisation's mission?"
-                    value={mission}
-                    onChangeText={setMission}
-                    multiline
-                />
+                            {/* Step 3 (Active) */}
+                            <View style={[styles.stepCircle, styles.stepActive]}>
+                                <Text style={styles.stepTextActive}>3</Text>
+                            </View>
+                        </View>
 
-                <Text style={styles.label}>Location</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="e.g. Johannesburg, Gauteng"
-                    value={location}
-                    onChangeText={setLocation}
-                />
+                        {/* Header */}
+                        <View style={styles.header}>
+                            <Text style={styles.title}>
+                                Tell us about your organisation
+                            </Text>
+                            <Text style={styles.subtitle}>
+                                Complete your profile to help us find suitable sponsors.
+                            </Text>
+                        </View>
 
-                <Text style={styles.label}>Funding Required</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="e.g. R100 000"
-                    value={fundingRequired}
-                    onChangeText={setFundingRequired}
-                    keyboardType="numeric"
-                />
+                        {/* Form */}
+                        <View style={styles.form}>
+                            {/* Organisation Name */}
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>ORGANISATION NAME</Text>
+                                <View
+                                    style={[
+                                        styles.inputContainer,
+                                        focusedField === "organisationName" &&
+                                            styles.inputContainerFocused,
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name="business-outline"
+                                        size={19}
+                                        color={
+                                            focusedField === "organisationName"
+                                                ? COLORS.primary
+                                                : COLORS.textSecondary
+                                        }
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Enter organisation name"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        value={organisationName}
+                                        onChangeText={setOrganisationName}
+                                        onFocus={() => setFocusedField("organisationName")}
+                                        onBlur={() => setFocusedField(null)}
+                                    />
+                                </View>
+                            </View>
 
-                <Text style={styles.label}>Target Community</Text>
-                <TextInput
-                    style={[styles.input, styles.multilineInput]}
-                    placeholder="Who does your organisation support?"
-                    value={targetCommunity}
-                    onChangeText={setTargetCommunity}
-                    multiline
-                />
+                            {/* Mission */}
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>MISSION</Text>
+                                <View
+                                    style={[
+                                        styles.inputContainer,
+                                        styles.multilineContainer,
+                                        focusedField === "mission" &&
+                                            styles.inputContainerFocused,
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name="flag-outline"
+                                        size={19}
+                                        color={
+                                            focusedField === "mission"
+                                                ? COLORS.primary
+                                                : COLORS.textSecondary
+                                        }
+                                        style={styles.multilineIcon}
+                                    />
+                                    <TextInput
+                                        style={[styles.input, styles.multilineInput]}
+                                        placeholder="What is your organisation's mission?"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        value={mission}
+                                        onChangeText={setMission}
+                                        multiline
+                                        numberOfLines={3}
+                                        onFocus={() => setFocusedField("mission")}
+                                        onBlur={() => setFocusedField(null)}
+                                    />
+                                </View>
+                            </View>
 
-                <TouchableOpacity
-                    style={styles.button}
-                    onPress={handleContinue}
-                >
-                    <Text style={styles.buttonText}>
-                        Create Profile
-                    </Text>
-                </TouchableOpacity>
-            </View>
-        </ScrollView>
+                            {/* Location */}
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>LOCATION</Text>
+                                <View
+                                    style={[
+                                        styles.inputContainer,
+                                        focusedField === "location" &&
+                                            styles.inputContainerFocused,
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name="location-outline"
+                                        size={19}
+                                        color={
+                                            focusedField === "location"
+                                                ? COLORS.primary
+                                                : COLORS.textSecondary
+                                        }
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="e.g. Johannesburg, Gauteng"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        value={location}
+                                        onChangeText={setLocation}
+                                        onFocus={() => setFocusedField("location")}
+                                        onBlur={() => setFocusedField(null)}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Funding Required */}
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>FUNDING REQUIRED</Text>
+                                <View
+                                    style={[
+                                        styles.inputContainer,
+                                        focusedField === "fundingRequired" &&
+                                            styles.inputContainerFocused,
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name="cash-outline"
+                                        size={19}
+                                        color={
+                                            focusedField === "fundingRequired"
+                                                ? COLORS.primary
+                                                : COLORS.textSecondary
+                                        }
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="e.g. R100 000"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        value={fundingRequired}
+                                        onChangeText={setFundingRequired}
+                                        keyboardType="numeric"
+                                        onFocus={() => setFocusedField("fundingRequired")}
+                                        onBlur={() => setFocusedField(null)}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Target Community */}
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>TARGET COMMUNITY</Text>
+                                <View
+                                    style={[
+                                        styles.inputContainer,
+                                        styles.multilineContainer,
+                                        focusedField === "targetCommunity" &&
+                                            styles.inputContainerFocused,
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name="people-outline"
+                                        size={19}
+                                        color={
+                                            focusedField === "targetCommunity"
+                                                ? COLORS.primary
+                                                : COLORS.textSecondary
+                                        }
+                                        style={styles.multilineIcon}
+                                    />
+                                    <TextInput
+                                        style={[styles.input, styles.multilineInput]}
+                                        placeholder="Who does your organisation support?"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        value={targetCommunity}
+                                        onChangeText={setTargetCommunity}
+                                        multiline
+                                        numberOfLines={3}
+                                        onFocus={() => setFocusedField("targetCommunity")}
+                                        onBlur={() => setFocusedField(null)}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Create Profile Button */}
+                            <TouchableOpacity
+                                style={styles.createButton}
+                                activeOpacity={0.85}
+                                onPress={handleContinue}
+                            >
+                                <Text style={styles.createButtonText}>Create Profile</Text>
+                                <Ionicons
+                                    name="arrow-forward"
+                                    size={18}
+                                    color="#FFFFFF"
+                                    style={styles.createButtonIcon}
+                                />
+                            </TouchableOpacity>
+                        </View>
+                    </ScrollView>
+                </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    scrollContainer: {
-        flexGrow: 1,
-    },
-
-    container: {
+    safeArea: {
         flex: 1,
-        padding: 25,
-        paddingTop: 60,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: COLORS.background,
+    },
+    flex: {
+        flex: 1,
+        backgroundColor: COLORS.background,
+    },
+    scrollContent: {
+        flexGrow: 1,
+        paddingHorizontal: 28,
+        paddingTop: 24,
+        paddingBottom: 32,
     },
 
+    /* Stepper */
+    stepperContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 32,
+    },
+    stepCircle: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    stepActive: {
+        backgroundColor: COLORS.primary,
+    },
+    stepInactive: {
+        backgroundColor: COLORS.white,
+        borderWidth: 1.5,
+        borderColor: COLORS.border,
+    },
+    stepTextActive: {
+        color: COLORS.white,
+        fontSize: 14,
+        fontWeight: "700",
+    },
+    stepTextInactive: {
+        color: COLORS.textSecondary,
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    stepLine: {
+        flex: 1,
+        height: 1.5,
+        backgroundColor: COLORS.border,
+        marginHorizontal: 6,
+    },
+
+    /* Header */
+    header: {
+        marginBottom: 32,
+    },
     title: {
         fontSize: 28,
-        fontWeight: "bold",
-        marginBottom: 10,
-    },
-
-    subtitle: {
-        fontSize: 16,
-        color: "#666",
-        lineHeight: 23,
-        marginBottom: 30,
-    },
-
-    label: {
-        fontSize: 15,
-        fontWeight: "600",
+        fontWeight: "700",
+        color: COLORS.textPrimary,
+        lineHeight: 36,
         marginBottom: 8,
     },
-
-    input: {
-        borderWidth: 1,
-        borderColor: "#D1D5DB",
-        borderRadius: 10,
-        padding: 14,
-        fontSize: 16,
-        marginBottom: 20,
+    subtitle: {
+        fontSize: 15,
+        color: COLORS.textSecondary,
+        lineHeight: 22,
     },
 
-    multilineInput: {
-        minHeight: 90,
-        textAlignVertical: "top",
+    /* Form */
+    form: {
+        flex: 1,
     },
-
-    button: {
-        backgroundColor: "#2563EB",
-        padding: 16,
-        borderRadius: 10,
+    fieldWrapper: {
+        marginBottom: 18,
+    },
+    fieldLabel: {
+        fontSize: 11,
+        fontWeight: "700",
+        letterSpacing: 1,
+        color: COLORS.textSecondary,
+        marginBottom: 8,
+    },
+    inputContainer: {
+        flexDirection: "row",
         alignItems: "center",
-        marginTop: 10,
-        marginBottom: 30,
+        height: 56,
+        paddingHorizontal: 16,
+        backgroundColor: COLORS.surface,
+        borderWidth: 1.5,
+        borderColor: COLORS.border,
+        borderRadius: 16,
+    },
+    inputContainerFocused: {
+        borderColor: COLORS.primary,
+        backgroundColor: COLORS.surfaceFocused,
+    },
+    input: {
+        flex: 1,
+        marginLeft: 12,
+        paddingVertical: 0,
+        fontSize: 15,
+        color: COLORS.textPrimary,
     },
 
-    buttonText: {
+    /* Multiline specific styles */
+    multilineContainer: {
+        alignItems: "flex-start",
+        height: "auto",
+        minHeight: 100,
+        paddingVertical: 16,
+    },
+    multilineIcon: {
+        marginTop: 2,
+    },
+    multilineInput: {
+        textAlignVertical: "top",
+        paddingVertical: 0,
+    },
+
+    /* Primary CTA */
+    createButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        height: 56,
+        borderRadius: 16,
+        backgroundColor: COLORS.primary,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+        elevation: 4,
+        marginTop: 10,
+    },
+    createButtonText: {
         color: "#FFFFFF",
         fontSize: 16,
-        fontWeight: "bold",
+        fontWeight: "700",
+        letterSpacing: 0.5,
+    },
+    createButtonIcon: {
+        marginLeft: 8,
     },
 });
