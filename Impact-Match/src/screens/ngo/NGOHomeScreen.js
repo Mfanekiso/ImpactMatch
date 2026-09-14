@@ -5,244 +5,316 @@ import {
     ScrollView,
     TouchableOpacity,
     StyleSheet,
+    SafeAreaView,
+    StatusBar,
 } from "react-native";
+import Ionicons from "@react-native-vector-icons/ionicons";
 
 import sponsors from "../../data/sponsors";
-import SponsorCard from "../../components/SponsorCard";
+
+const COLORS = {
+    background: "#F9FAFB",
+    surface: "#FFFFFF",
+    primary: "#2563EB", // Blue accent
+    darkCard: "#1E3A8A", // Dark blue for impact overview
+    textPrimary: "#111827",
+    textSecondary: "#6B7280",
+    border: "#E5E7EB",
+    white: "#FFFFFF",
+};
 
 export default function NGOHomeScreen({ navigation, route }) {
-    const { organisationName, location, fundingRequired } =
-        route.params || {};
+    const { organisationName } = route.params || {};
 
-    const recommendedSponsors = sponsors.slice(0, 2);
+    // Slice the first 3 sponsors for the "Recommended for You" section
+    const recommendedSponsors = sponsors ? sponsors.slice(0, 3) : [];
 
     return (
-        <ScrollView
-            style={styles.container}
-            contentContainerStyle={styles.content}
-        >
-            <Text style={styles.greeting}>
-                Welcome back 👋
-            </Text>
+        <SafeAreaView style={styles.safeArea}>
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-            <Text style={styles.organisationName}>
-                {organisationName || "Your Organisation"}
-            </Text>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity style={styles.headerIcon}>
+                        <Ionicons name="menu-outline" size={26} color={COLORS.textPrimary} />
+                    </TouchableOpacity>
 
-            {/* Profile Summary */}
-            <View style={styles.profileCard}>
-                <Text style={styles.profileTitle}>
-                    Your Organisation Profile
-                </Text>
+                    <Text style={styles.headerTitle}>Dashboard</Text>
 
-                <View style={styles.profileRow}>
-                    <Text style={styles.profileLabel}>
-                        Location
-                    </Text>
-
-                    <Text style={styles.profileValue}>
-                        {location || "Not provided"}
-                    </Text>
+                    <TouchableOpacity style={styles.headerIcon}>
+                        <Ionicons name="notifications-outline" size={24} color={COLORS.textPrimary} />
+                    </TouchableOpacity>
                 </View>
 
-                <View style={styles.profileRow}>
-                    <Text style={styles.profileLabel}>
-                        Funding Required
-                    </Text>
-
-                    <Text style={styles.profileValue}>
-                        {fundingRequired || "Not provided"}
-                    </Text>
-                </View>
-
-                <TouchableOpacity
-                    onPress={() =>
-                        navigation.navigate("NGOProfile", {
-                            organisationName,
-                            location,
-                            fundingRequired,
-                        })
-                    }
-                >
-                    <Text style={styles.profileLink}>
-                        View Profile →
-                    </Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* Recommended Sponsors */}
-            <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>
-                    Recommended Sponsors
+                {/* Greeting */}
+                <Text style={styles.greeting}>
+                    Welcome back, {organisationName || "User"}
                 </Text>
 
+                {/* Impact Overview Card */}
+                <View style={styles.impactCard}>
+                    <Text style={styles.impactTitle}>Your Impact Overview</Text>
+
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statNumber}>0</Text>
+                            <Text style={styles.statLabel}>Organisations{"\n"}Partnered</Text>
+                        </View>
+
+                        <View style={styles.statItem}>
+                            <Text style={styles.statNumber}>R0</Text>
+                            <Text style={styles.statLabel}>Total{"\n"}Invested</Text>
+                        </View>
+
+                        <View style={styles.statItem}>
+                            <Text style={styles.statNumber}>0</Text>
+                            <Text style={styles.statLabel}>Active{"\n"}Partnerships</Text>
+                        </View>
+
+                        <View style={styles.statItem}>
+                            <Text style={styles.statNumber}>0</Text>
+                            <Text style={styles.statLabel}>People{"\n"}Impacted</Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Recommended Section Header */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Recommended for You</Text>
+                    <TouchableOpacity onPress={() => navigation.navigate("SponsorSearch")}>
+                        <Text style={styles.seeAll}>See all</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Recommendations List */}
+                {recommendedSponsors.length > 0 ? (
+                    recommendedSponsors.map((sponsor) => (
+                        <TouchableOpacity
+                            key={sponsor.id}
+                            style={styles.sponsorCard}
+                            activeOpacity={0.8}
+                            onPress={() => navigation.navigate("SponsorDetails", { sponsor })}
+                        >
+                            <View style={styles.sponsorLogo}>
+                                <Ionicons name="business-outline" size={22} color={COLORS.primary} />
+                            </View>
+
+                            <View style={styles.sponsorInfo}>
+                                <Text style={styles.sponsorName} numberOfLines={1}>
+                                    {sponsor.name}
+                                </Text>
+                                <Text style={styles.sponsorTags} numberOfLines={1}>
+                                    {sponsor.tags?.join(" • ") || "General"}
+                                </Text>
+                                <Text style={styles.sponsorLocation} numberOfLines={1}>
+                                    {sponsor.location || "Location not specified"}
+                                </Text>
+                            </View>
+
+                            <View style={styles.matchBadge}>
+                                <Text style={styles.matchText}>
+                                    {sponsor.matchPercentage || 0}%
+                                </Text>
+                                <Text style={styles.matchLabel}>Match</Text>
+                            </View>
+                        </TouchableOpacity>
+                    ))
+                ) : (
+                    <Text style={styles.emptyText}>No recommendations available yet.</Text>
+                )}
+
+                {/* Explore More Button */}
                 <TouchableOpacity
-                    onPress={() =>
-                        navigation.navigate("SponsorSearch")
-                    }
+                    style={styles.exploreButton}
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate("SponsorSearch")}
                 >
-                    <Text style={styles.viewAll}>
-                        View All
-                    </Text>
+                    <Text style={styles.exploreButtonText}>Explore More Organizations</Text>
+                    <Ionicons name="arrow-forward" size={18} color={COLORS.white} />
                 </TouchableOpacity>
-            </View>
-
-            {recommendedSponsors.map((sponsor) => (
-                <SponsorCard
-                    key={sponsor.id}
-                    sponsor={sponsor}
-                    onPress={() =>
-                        navigation.navigate(
-                            "SponsorDetails",
-                            { sponsor }
-                        )
-                    }
-                />
-            ))}
-
-            {/* Quick Actions */}
-            <Text style={styles.sectionTitle}>
-                Quick Actions
-            </Text>
-
-            <View style={styles.actionsContainer}>
-                <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() =>
-                        navigation.navigate("SponsorSearch")
-                    }
-                >
-                    <Text style={styles.actionTitle}>
-                        Find Sponsors
-                    </Text>
-
-                    <Text style={styles.actionText}>
-                        Discover organisations that match your needs.
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() =>
-                        navigation.navigate("Opportunities")
-                    }
-                >
-                    <Text style={styles.actionTitle}>
-                        My Opportunities
-                    </Text>
-
-                    <Text style={styles.actionText}>
-                        Manage projects looking for funding.
-                    </Text>
-                </TouchableOpacity>
-            </View>
-        </ScrollView>
+            </ScrollView>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
+    safeArea: {
         flex: 1,
-        backgroundColor: "#F9FAFB",
+        backgroundColor: COLORS.background,
     },
-
-    content: {
+    scrollContent: {
         padding: 20,
-        paddingTop: 60,
+        paddingTop: 10,
         paddingBottom: 40,
     },
 
+    /* Header */
+    header: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 20,
+    },
+    headerIcon: {
+        padding: 4,
+    },
+    headerTitle: {
+        fontSize: 20,
+        fontWeight: "700",
+        color: COLORS.textPrimary,
+    },
+
+    /* Greeting */
     greeting: {
-        fontSize: 16,
-        color: "#6B7280",
-        marginBottom: 5,
+        fontSize: 22,
+        fontWeight: "700",
+        color: COLORS.textPrimary,
+        marginBottom: 20,
     },
 
-    organisationName: {
-        fontSize: 28,
-        fontWeight: "bold",
-        marginBottom: 25,
+    /* Impact Card */
+    impactCard: {
+        backgroundColor: COLORS.darkCard,
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 28,
     },
-
-    profileCard: {
-        backgroundColor: "#FFFFFF",
-        borderRadius: 14,
-        padding: 18,
-        marginBottom: 30,
-        borderWidth: 1,
-        borderColor: "#E5E7EB",
+    impactTitle: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: COLORS.white,
+        marginBottom: 20,
     },
-
-    profileTitle: {
-        fontSize: 18,
-        fontWeight: "bold",
-        marginBottom: 18,
-    },
-
-    profileRow: {
+    statsRow: {
         flexDirection: "row",
         justifyContent: "space-between",
-        marginBottom: 12,
+    },
+    statItem: {
+        alignItems: "center",
+        flex: 1,
+    },
+    statNumber: {
+        fontSize: 20,
+        fontWeight: "800",
+        color: COLORS.white,
+        marginBottom: 6,
+    },
+    statLabel: {
+        fontSize: 10,
+        fontWeight: "500",
+        color: "rgba(255, 255, 255, 0.7)",
+        textAlign: "center",
+        lineHeight: 14,
     },
 
-    profileLabel: {
-        fontSize: 14,
-        color: "#6B7280",
-    },
-
-    profileValue: {
-        fontSize: 14,
-        fontWeight: "600",
-        maxWidth: "55%",
-        textAlign: "right",
-    },
-
-    profileLink: {
-        color: "#2563EB",
-        fontWeight: "bold",
-        marginTop: 8,
-    },
-
+    /* Section Header */
     sectionHeader: {
         flexDirection: "row",
-        justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 15,
+        justifyContent: "space-between",
+        marginBottom: 16,
     },
-
     sectionTitle: {
-        fontSize: 20,
-        fontWeight: "bold",
-        marginBottom: 15,
+        fontSize: 18,
+        fontWeight: "700",
+        color: COLORS.textPrimary,
     },
-
-    viewAll: {
-        color: "#2563EB",
-        fontWeight: "600",
-        marginBottom: 15,
-    },
-
-    actionsContainer: {
-        gap: 12,
-    },
-
-    actionButton: {
-        backgroundColor: "#FFFFFF",
-        padding: 18,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: "#E5E7EB",
-    },
-
-    actionTitle: {
-        fontSize: 17,
-        fontWeight: "bold",
-        marginBottom: 5,
-    },
-
-    actionText: {
+    seeAll: {
         fontSize: 14,
-        color: "#6B7280",
-        lineHeight: 20,
+        fontWeight: "600",
+        color: COLORS.primary,
+    },
+
+    /* Sponsor Cards */
+    sponsorCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    sponsorLogo: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        backgroundColor: "rgba(37, 99, 235, 0.08)", // Light blue tint
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: 14,
+    },
+    sponsorInfo: {
+        flex: 1,
+        marginRight: 10,
+    },
+    sponsorName: {
+        fontSize: 15,
+        fontWeight: "700",
+        color: COLORS.textPrimary,
+        marginBottom: 4,
+    },
+    sponsorTags: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
+        marginBottom: 2,
+    },
+    sponsorLocation: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
+    },
+    matchBadge: {
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(37, 99, 235, 0.08)",
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 10,
+    },
+    matchText: {
+        fontSize: 13,
+        fontWeight: "700",
+        color: COLORS.primary,
+    },
+    matchLabel: {
+        fontSize: 10,
+        fontWeight: "600",
+        color: COLORS.primary,
+        marginTop: 2,
+    },
+
+    /* Empty State */
+    emptyText: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
+        textAlign: "center",
+        marginVertical: 20,
+    },
+
+    /* Explore Button */
+    exploreButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: COLORS.primary,
+        borderRadius: 16,
+        paddingVertical: 16,
+        marginTop: 10,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+        elevation: 4,
+    },
+    exploreButtonText: {
+        fontSize: 15,
+        fontWeight: "700",
+        color: COLORS.white,
+        marginRight: 8,
     },
 });
