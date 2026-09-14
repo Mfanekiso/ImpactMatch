@@ -13,21 +13,13 @@
     "@react-navigation/bottom-tabs": "^7.18.18",
     "@react-navigation/native": "^7.3.18",
     "@react-navigation/native-stack": "^7.18.10",
-<<<<<<< HEAD
-    "expo": "^57.0.22",
-=======
     "expo": "~57.0.21",
->>>>>>> 9b3a1d907c8ef76ef0a6025144f6411f9b277997
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
-<<<<<<< HEAD
-    "react-native-screens": "~4.26.0"
-=======
     "react-native-screens": "~4.26.0",
     "react-native-vector-icons": "^10.3.0"
->>>>>>> 9b3a1d907c8ef76ef0a6025144f6411f9b277997
   },
   "private": true
 }

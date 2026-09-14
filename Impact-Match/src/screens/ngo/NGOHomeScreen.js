@@ -85,7 +85,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                 {/* Recommended Section Header */}
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Recommended for You</Text>
-                    <TouchableOpacity onPress={() => navigation.navigate("SponsorSearch")}>
+                    <TouchableOpacity onPress={() => navigation.navigate("Matches")}>
                         <Text style={styles.seeAll}>See all</Text>
                     </TouchableOpacity>
                 </View>
@@ -128,14 +128,14 @@ export default function NGOHomeScreen({ navigation, route }) {
                 )}
 
                 {/* Explore More Button */}
-                <TouchableOpacity
+                {/* <TouchableOpacity
                     style={styles.exploreButton}
                     activeOpacity={0.85}
-                    onPress={() => navigation.navigate("SponsorSearch")}
+                    onPress={() => navigation.navigate("SponsorSearchScreen")}
                 >
                     <Text style={styles.exploreButtonText}>Explore More Organizations</Text>
                     <Ionicons name="arrow-forward" size={18} color={COLORS.white} />
-                </TouchableOpacity>
+                </TouchableOpacity> */}
             </ScrollView>
         </SafeAreaView>
     );

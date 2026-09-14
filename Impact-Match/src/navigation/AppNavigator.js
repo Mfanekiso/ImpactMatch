@@ -42,7 +42,7 @@ function MainTabs() {
             name="Matches" 
             component={MatchesScreen} 
              options={{ tabBarIcon: ({ color, size }) => (
-                <Ionicons name="collaboration-outline" 
+                <Ionicons name="people" 
                 size={size} 
                 color={color} />
               ) }}
@@ -52,7 +52,7 @@ function MainTabs() {
             name="Messages"
              component={MessagesScreen}
               options={{ tabBarIcon: ({ color, size }) => (
-                <Ionicons name="message-outline" 
+                <Ionicons name="chatbubble" 
                 size={size} 
                 color={color} />
               ) }}
