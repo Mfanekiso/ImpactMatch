@@ -91,16 +91,12 @@ export default function UserTypeScreen({ navigation }) {
                     <TouchableOpacity
                         style={styles.card}
                         activeOpacity={0.8}
-<<<<<<< HEAD
                         onPress={() =>
                              navigation.navigate("SponsorTabs", {
                                   screen: "Home",
                                   params: { sponsorName: "GreenFuture Foundation" },
                                  })
                                 }
-=======
-                        onPress={() => Alert.alert("Sponsor", "Sponsor setup coming soon.")}
->>>>>>> 9c3cc5d81788a18ed81af4012a16d994a9d2d12d
                     >
                         <View style={styles.iconWrapper}>
                             <Ionicons name="briefcase-outline" size={24} color={COLORS.primary} />
