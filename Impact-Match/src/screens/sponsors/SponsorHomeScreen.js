@@ -104,7 +104,7 @@ function getInitials(name) {
 }
 
 export default function SponsorHomeScreen({ navigation, route }) {
-    const { sponsorName = "GreenFuture Foundation" } = route?.params || {};
+    const { organisationName = "GreenFuture Foundation" } = route?.params || {};
     const [savedIds, setSavedIds] = useState([]);
 
     const topMatch = opportunities[0];
@@ -134,7 +134,7 @@ export default function SponsorHomeScreen({ navigation, route }) {
                 <View style={styles.header}>
                     <View style={styles.headerText}>
                         <Text style={styles.greetingSmall}>{getGreeting()} 👋</Text>
-                        <Text style={styles.greetingName}>{sponsorName}</Text>
+                        <Text style={styles.greetingName}>{organisationName}</Text>
                         <Text style={styles.subtitle}>
                             Let's find your next impact partnership.
                         </Text>
@@ -157,7 +157,7 @@ export default function SponsorHomeScreen({ navigation, route }) {
                             activeOpacity={0.7}
                             onPress={() => navigation.navigate("Profile")}
                         >
-                            <Text style={styles.avatarText}>{getInitials(sponsorName)}</Text>
+                            <Text style={styles.avatarText}>{getInitials(organisationName)}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
