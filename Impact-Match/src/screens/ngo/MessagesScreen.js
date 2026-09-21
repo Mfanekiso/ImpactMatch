@@ -122,11 +122,7 @@ export default function MessagesScreen({ navigation }) {
                         building partnerships.
                     </Text>
 
-<<<<<<< HEAD
                     <TouchableOpacity
-=======
-                    {/* <TouchableOpacity
->>>>>>> 9c3cc5d81788a18ed81af4012a16d994a9d2d12d
                         style={styles.startChatButton}
                         activeOpacity={0.85}
                         onPress={handleStartChat}
@@ -138,11 +134,7 @@ export default function MessagesScreen({ navigation }) {
                             style={styles.startChatIcon}
                         />
                         <Text style={styles.startChatText}>Start a Chat</Text>
-<<<<<<< HEAD
                     </TouchableOpacity>
-=======
-                    </TouchableOpacity> */}
->>>>>>> 9c3cc5d81788a18ed81af4012a16d994a9d2d12d
                 </View>
             )}
         </SafeAreaView>

@@ -18,10 +18,7 @@ import SponsorDetailsScreen from "../screens/ngo/SponsorDetailsScreen";
 import ImpactScreen from "../screens/ngo/ImpactScreen";
 import NGOProfileScreen from "../screens/ngo/NGOProfileScreen";
 import OpportunitiesScreen from "../screens/ngo/OpportunitiesScreen";
-<<<<<<< HEAD
 import SponsorNavigator from "./SponsorNavigator";
-=======
->>>>>>> 9c3cc5d81788a18ed81af4012a16d994a9d2d12d
 
 // Initialize Navigators
 const Tab = createBottomTabNavigator();
@@ -46,11 +43,7 @@ function MainTabs() {
             name="Matches" 
             component={MatchesScreen} 
              options={{ tabBarIcon: ({ color, size }) => (
-<<<<<<< HEAD
                 <Ionicons name="collaboration-outline" 
-=======
-                <Ionicons name="people" 
->>>>>>> 9c3cc5d81788a18ed81af4012a16d994a9d2d12d
                 size={size} 
                 color={color} />
               ) }}
@@ -60,11 +53,7 @@ function MainTabs() {
             name="Messages"
              component={MessagesScreen}
               options={{ tabBarIcon: ({ color, size }) => (
-<<<<<<< HEAD
                 <Ionicons name="message-outline" 
-=======
-                <Ionicons name="chatbubble" 
->>>>>>> 9c3cc5d81788a18ed81af4012a16d994a9d2d12d
                 size={size} 
                 color={color} />
               ) }}
@@ -114,12 +103,8 @@ export default function AppNavigator() {
                 
                 {/* The Main App (With Bottom Bar) */}
                 <Stack.Screen name="MainTabs" component={MainTabs} />
-<<<<<<< HEAD
                 <Stack.Screen name="SponsorTabs" component={SponsorNavigator} />
                 
-=======
-
->>>>>>> 9c3cc5d81788a18ed81af4012a16d994a9d2d12d
                 {/* Detail Screens (Placed here so they cover the bottom bar when opened) */}
                 <Stack.Screen name="SponsorDetails" component={SponsorDetailsScreen} />
             </Stack.Navigator>
