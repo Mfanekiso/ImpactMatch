@@ -68,7 +68,7 @@ export default function SponsorSetupScreen({ route, navigation }) {
                 organisationName: organisationName,
                 industry: industry,
                 location: location,
-                fundingBudget: fundingBudget,
+                fundingBudget: fundingBudget,   
                 preferredCauses: preferredCauses,
                 profileCompleted: true // Flag to indicate profile setup is done
             });
