@@ -19,6 +19,7 @@ import ImpactScreen from "../screens/ngo/ImpactScreen";
 import NGOProfileScreen from "../screens/ngo/NGOProfileScreen";
 import OpportunitiesScreen from "../screens/ngo/OpportunitiesScreen";
 import SponsorNavigator from "./SponsorNavigator";
+import SponsorSetupScreen from "../screens/sponsors/SponsorSetupScreen";
 
 // Initialize Navigators
 const Tab = createBottomTabNavigator();
@@ -100,6 +101,7 @@ export default function AppNavigator() {
                 <Stack.Screen name="SignUp" component={SignUpScreen} />
                 <Stack.Screen name="UserType" component={UserTypeScreen} />
                 <Stack.Screen name="NGOSetup" component={NGOSetupScreen} />
+                <Stack.Screen name="SponsorSetup" component={SponsorSetupScreen} />
                 
                 {/* The Main App (With Bottom Bar) */}
                 <Stack.Screen name="MainTabs" component={MainTabs} />
