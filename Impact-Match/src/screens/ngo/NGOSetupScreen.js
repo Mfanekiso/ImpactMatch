@@ -14,7 +14,11 @@ import {
     TouchableWithoutFeedback,
     Keyboard,
 } from "react-native";
-import Ionicons from '@react-native-vector-icons/ionicons'
+import Ionicons from '@react-native-vector-icons/ionicons';
+
+// Firebase imports
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../../../Backend/firebaseConfig"; // Adjust path if needed
 
 const COLORS = {
     background: "#FFFFFF",
@@ -29,7 +33,10 @@ const COLORS = {
     white: "#FFFFFF",
 };
 
-export default function NGOSetupScreen({ navigation }) {
+export default function NGOSetupScreen({ route, navigation }) {
+    // 1. Extract the uid and role passed from the previous screen
+    const { uid, role } = route.params || {};
+
     const [organisationName, setOrganisationName] = useState("");
     const [mission, setMission] = useState("");
     const [location, setLocation] = useState("");
@@ -37,7 +44,8 @@ export default function NGOSetupScreen({ navigation }) {
     const [targetCommunity, setTargetCommunity] = useState("");
     const [focusedField, setFocusedField] = useState(null);
 
-    const handleContinue = () => {
+    // 2. Make this function async so we can talk to Firestore
+    const handleContinue = async () => {
         if (
             !organisationName.trim() ||
             !mission.trim() ||
@@ -52,16 +60,27 @@ export default function NGOSetupScreen({ navigation }) {
             return;
         }
 
-        navigation.navigate('MainTabs', {
-            screen: 'Home',
-            params: {
-                organisationName,
-                mission,
-                location,
-                fundingRequired,
-                targetCommunity,
-            },
-        });
+        try {
+            // 3. Update the existing document in the "users" collection
+            const userRef = doc(db, "users", uid);
+            await updateDoc(userRef, {
+                role: role,
+                organisationName: organisationName,
+                mission: mission,
+                location: location,
+                fundingRequired: fundingRequired,
+                targetCommunity: targetCommunity,
+                profileCompleted: true // Helpful flag to know they finished setup
+            });
+
+            // 4. Navigate to the main app once the database saves successfully
+            navigation.navigate('MainTabs', {
+                screen: 'Home'
+            });
+
+        } catch (error) {
+            Alert.alert("Error Saving Profile", error.message);
+        }
     };
 
     return (
