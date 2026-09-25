@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     View,
     Text,
@@ -8,10 +8,20 @@ import {
     SafeAreaView,
     StatusBar,
     Switch,
+    Image,
+    ActivityIndicator,
+    Alert,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import * as ImagePicker from "expo-image-picker";
 
 import EditProfileModal from "../../components/sponsors/EditProfileModal";
+
+// Firebase imports
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { signOut } from "firebase/auth";
+import { auth, db } from "../../../Backend/firebaseConfig";
 
 const COLORS = {
     background: "#F9FAFB",
@@ -26,7 +36,6 @@ const COLORS = {
     danger: "#EF4444",
     dangerLight: "rgba(239, 68, 68, 0.10)",
     muted: "#94A3B8",
-    // Icon tints
     purple: "#7C3AED",
     purpleLight: "rgba(124, 58, 237, 0.12)",
     yellow: "#D97706",
@@ -35,12 +44,6 @@ const COLORS = {
     blueLight: "rgba(37, 99, 235, 0.12)",
     gray: "#64748B",
     grayLight: "rgba(100, 116, 139, 0.12)",
-};
-
-const stats = {
-    matches: 47,
-    partnerships: 6,
-    funded: "R4.2M",
 };
 
 // Derives display initials from an organisation name, e.g. "GreenFuture Foundation" -> "GF"
@@ -87,20 +90,11 @@ function ProfileRow({ icon, iconBg, iconColor, title, subtitle, titleColor, righ
 }
 
 export default function SponsorProfileScreen({ navigation }) {
-    // Placeholder profile data — swap for the logged-in sponsor once auth exists.
-    // Lives inside the component (as state) so EditProfileModal's onSave can
-    // actually update what's displayed here.
-    const [profile, setProfile] = useState({
-        name: "GreenFuture Foundation",
-        verified: true,
-        plan: "Sponsor · Pro Plan",
-        email: "info@greenfuture.org",
-        phone: "+27 21 555 0148",
-        website: "https://greenfuture.org",
-        location: "Cape Town, South Africa",
-        description:
-            "GreenFuture Foundation is dedicated to environmental conservation and sustainable community development across the Western Cape.",
-    });
+    const uid = auth.currentUser?.uid;
+
+    const [profile, setProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
 
     const [notifMatches, setNotifMatches] = useState(true);
     const [notifMessages, setNotifMessages] = useState(true);
@@ -109,12 +103,128 @@ export default function SponsorProfileScreen({ navigation }) {
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
     const [editProfileVisible, setEditProfileVisible] = useState(false);
 
-    const handleSignOut = () => {
-        navigation.getParent?.()?.reset?.({
-            index: 0,
-            routes: [{ name: "Welcome" }],
-        }) ?? navigation.navigate("Welcome");
+    // Pull the real sponsor document from Firestore
+    const fetchProfile = async () => {
+        if (!uid) return;
+        try {
+            const snap = await getDoc(doc(db, "users", uid));
+            if (snap.exists()) {
+                setProfile(snap.data());
+            }
+        } catch (error) {
+            Alert.alert("Error Loading Profile", error.message);
+        } finally {
+            setLoading(false);
+        }
     };
+
+    useEffect(() => {
+        fetchProfile();
+    }, [uid]);
+
+    // Avatar photo upload -> Firebase Storage -> save URL on the same doc
+    const handlePickImage = async () => {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+            Alert.alert("Permission Needed", "Allow photo access to upload a profile image.");
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+        });
+
+        if (result.canceled) return;
+
+        try {
+            setUploading(true);
+            const uri = result.assets[0].uri;
+            const response = await fetch(uri);
+            const blob = await response.blob();
+
+            const storage = getStorage();
+            const imageRef = ref(storage, `profileImages/${uid}`);
+            await uploadBytes(imageRef, blob);
+            const downloadUrl = await getDownloadURL(imageRef);
+
+            await updateDoc(doc(db, "users", uid), {
+                profileImageUrl: downloadUrl,
+            });
+
+            setProfile((prev) => ({ ...prev, profileImageUrl: downloadUrl }));
+        } catch (error) {
+            Alert.alert("Upload Failed", error.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    // Save edits from the modal straight back to the same Firestore doc
+    const handleSaveProfile = async (updatedProfile) => {
+        if (!uid) return;
+        try {
+            await updateDoc(doc(db, "users", uid), {
+                organisationName: updatedProfile.orgName,
+                email: updatedProfile.email,
+                phone: updatedProfile.phone,
+                website: updatedProfile.website,
+                location: updatedProfile.location,
+                description: updatedProfile.description,
+            });
+
+            setProfile((prev) => ({
+                ...prev,
+                organisationName: updatedProfile.orgName,
+                email: updatedProfile.email,
+                phone: updatedProfile.phone,
+                website: updatedProfile.website,
+                location: updatedProfile.location,
+                description: updatedProfile.description,
+            }));
+        } catch (error) {
+            Alert.alert("Error Saving Profile", error.message);
+        }
+    };
+
+    const handleSignOut = async () => {
+        try {
+            await signOut(auth);
+            navigation.getParent?.()?.reset?.({
+                index: 0,
+                routes: [{ name: "Welcome" }],
+            }) ?? navigation.navigate("Welcome");
+        } catch (error) {
+            Alert.alert("Sign Out Failed", error.message);
+        }
+    };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={[styles.safeArea, styles.centered]}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+            </SafeAreaView>
+        );
+    }
+
+    const {
+        organisationName,
+        full_name,
+        email,
+        phone,
+        website,
+        location,
+        description,
+        industry,
+        fundingBudget,
+        preferredCauses,
+        profileImageUrl,
+        profileCompleted,
+    } = profile || {};
+
+    const displayName = organisationName || full_name || "Your Organisation";
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -127,53 +237,43 @@ export default function SponsorProfileScreen({ navigation }) {
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.avatarWrapper}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{getInitials(profile.name)}</Text>
-                        </View>
+                        <TouchableOpacity activeOpacity={0.85} onPress={handlePickImage} disabled={uploading}>
+                            {profileImageUrl ? (
+                                <Image source={{ uri: profileImageUrl }} style={styles.avatarImage} />
+                            ) : (
+                                <View style={styles.avatar}>
+                                    <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
 
                         <TouchableOpacity
                             style={styles.editBadge}
                             activeOpacity={0.8}
-                            onPress={() => setEditProfileVisible(true)}
+                            onPress={handlePickImage}
+                            disabled={uploading}
                         >
-                            <Ionicons name="camera" size={14} color={COLORS.white} />
+                            {uploading ? (
+                                <ActivityIndicator size="small" color={COLORS.white} />
+                            ) : (
+                                <Ionicons name="camera" size={14} color={COLORS.white} />
+                            )}
                         </TouchableOpacity>
                     </View>
 
-                    <Text style={styles.orgName}>{profile.name}</Text>
+                    <Text style={styles.orgName}>{displayName}</Text>
 
                     <View style={styles.badgeRow}>
-                        {profile.verified && (
+                        {profileCompleted && (
                             <View style={styles.verifiedPill}>
                                 <Ionicons name="checkmark-circle" size={12} color={COLORS.white} />
-                                <Text style={styles.verifiedPillText}>Verified</Text>
+                                <Text style={styles.verifiedPillText}>Profile Complete</Text>
                             </View>
                         )}
-                        <Text style={styles.planText}>{profile.plan}</Text>
+                        {industry ? <Text style={styles.planText}>{industry}</Text> : null}
                     </View>
 
-                    <Text style={styles.email}>{profile.email}</Text>
-
-                    <View style={styles.statsRow}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{stats.matches}</Text>
-                            <Text style={styles.statLabel}>Matches</Text>
-                        </View>
-
-                        <View style={styles.statDivider} />
-
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{stats.partnerships}</Text>
-                            <Text style={styles.statLabel}>Partnerships</Text>
-                        </View>
-
-                        <View style={styles.statDivider} />
-
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{stats.funded}</Text>
-                            <Text style={styles.statLabel}>Funded</Text>
-                        </View>
-                    </View>
+                    <Text style={styles.email}>{email || "No email on file"}</Text>
                 </View>
 
                 {/* Body */}
@@ -195,16 +295,16 @@ export default function SponsorProfileScreen({ navigation }) {
                             iconBg={COLORS.blueLight}
                             iconColor={COLORS.blue}
                             title="Account Details"
-                            subtitle="View your account information"
+                            subtitle={`Industry: ${industry || "Not provided"} · Budget: ${fundingBudget ? `R${fundingBudget}` : "Not provided"}`}
                             onPress={() => {}}
                         />
                         <View style={styles.divider} />
                         <ProfileRow
-                            icon="lock-closed-outline"
+                            icon="heart-outline"
                             iconBg={COLORS.purpleLight}
                             iconColor={COLORS.purple}
-                            title="Change Password"
-                            subtitle="Update your login password"
+                            title="Preferred Causes"
+                            subtitle={preferredCauses || "Not provided"}
                             onPress={() => {}}
                         />
                     </View>
@@ -320,19 +420,16 @@ export default function SponsorProfileScreen({ navigation }) {
                 visible={editProfileVisible}
                 onClose={() => setEditProfileVisible(false)}
                 initialProfile={{
-                    orgName: profile.name,
-                    email: profile.email,
-                    phone: profile.phone,
-                    website: profile.website,
-                    location: profile.location,
-                    description: profile.description,
+                    orgName: displayName,
+                    email: email || "",
+                    phone: phone || "",
+                    website: website || "",
+                    location: location || "",
+                    description: description || "",
                 }}
                 onSave={(updatedProfile) => {
-                    setProfile((prev) => ({
-                        ...prev,
-                        ...updatedProfile,
-                        name: updatedProfile.orgName,
-                    }));
+                    handleSaveProfile(updatedProfile);
+                    setEditProfileVisible(false);
                 }}
             />
         </SafeAreaView>
@@ -344,11 +441,13 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.headerBg,
     },
+    centered: {
+        justifyContent: "center",
+        alignItems: "center",
+    },
     scrollContent: {
         paddingBottom: 40,
     },
-
-    /* Header */
     header: {
         backgroundColor: COLORS.headerBg,
         alignItems: "center",
@@ -370,6 +469,13 @@ const styles = StyleSheet.create({
         borderColor: "rgba(255,255,255,0.25)",
         alignItems: "center",
         justifyContent: "center",
+    },
+    avatarImage: {
+        width: 84,
+        height: 84,
+        borderRadius: 42,
+        borderWidth: 2,
+        borderColor: "rgba(255,255,255,0.25)",
     },
     avatarText: {
         color: COLORS.white,
@@ -424,37 +530,8 @@ const styles = StyleSheet.create({
     email: {
         fontSize: 13,
         color: "rgba(203, 213, 225, 0.8)",
-        marginBottom: 22,
+        marginBottom: 4,
     },
-
-    /* Stats */
-    statsRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        width: "100%",
-    },
-    statItem: {
-        flex: 1,
-        alignItems: "center",
-    },
-    statValue: {
-        fontSize: 17,
-        fontWeight: "800",
-        color: COLORS.white,
-        marginBottom: 3,
-    },
-    statLabel: {
-        fontSize: 11,
-        fontWeight: "500",
-        color: "rgba(255,255,255,0.6)",
-    },
-    statDivider: {
-        width: 1,
-        height: 30,
-        backgroundColor: "rgba(255,255,255,0.15)",
-    },
-
-    /* Body */
     body: {
         backgroundColor: COLORS.background,
         paddingHorizontal: 20,
@@ -482,8 +559,6 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.border,
         marginLeft: 66,
     },
-
-    /* Row */
     row: {
         flexDirection: "row",
         alignItems: "center",
@@ -518,8 +593,6 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
         lineHeight: 16,
     },
-
-    /* Notifications toggle block */
     notificationsBlock: {
         paddingBottom: 6,
     },
@@ -543,8 +616,6 @@ const styles = StyleSheet.create({
         color: COLORS.textPrimary,
         fontWeight: "500",
     },
-
-    /* Footer */
     footer: {
         alignItems: "center",
         paddingVertical: 12,

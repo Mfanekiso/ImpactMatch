@@ -299,7 +299,7 @@ export default function NGOSetupScreen({ route, navigation }) {
                             <TouchableOpacity
                                 style={styles.createButton}
                                 activeOpacity={0.85}
-                                onPress={handleContinue}
+                                onPress={handleContinue}        
                             >
                                 <Text style={styles.createButtonText}>Create Profile</Text>
                                 <Ionicons

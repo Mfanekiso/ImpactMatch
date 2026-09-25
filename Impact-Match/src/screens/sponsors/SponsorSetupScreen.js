@@ -43,6 +43,7 @@ export default function SponsorSetupScreen({ route, navigation }) {
     const [fundingBudget, setFundingBudget] = useState("");
     const [preferredCauses, setPreferredCauses] = useState("");
     const [focusedField, setFocusedField] = useState(null);
+    const [saving, setSaving] = useState(false);
 
     // 2. Make this function async to connect to Firestore
     const handleContinue = async () => {
@@ -60,6 +61,12 @@ export default function SponsorSetupScreen({ route, navigation }) {
             return;
         }
 
+        if (!uid) {
+            Alert.alert("Error", "No user ID found. Please sign up again.");
+            return;
+        }
+
+        setSaving(true);
         try {
             // 3. Update the existing document in the "users" collection
             const userRef = doc(db, "users", uid);
@@ -68,7 +75,7 @@ export default function SponsorSetupScreen({ route, navigation }) {
                 organisationName: organisationName,
                 industry: industry,
                 location: location,
-                fundingBudget: fundingBudget,   
+                fundingBudget: fundingBudget,
                 preferredCauses: preferredCauses,
                 profileCompleted: true // Flag to indicate profile setup is done
             });
@@ -80,6 +87,8 @@ export default function SponsorSetupScreen({ route, navigation }) {
 
         } catch (error) {
             Alert.alert("Error Saving Profile", error.message);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -292,14 +301,19 @@ export default function SponsorSetupScreen({ route, navigation }) {
                                 style={styles.createButton}
                                 activeOpacity={0.85}
                                 onPress={handleContinue}
+                                disabled={saving}
                             >
-                                <Text style={styles.createButtonText}>Create Profile</Text>
-                                <Ionicons
-                                    name="arrow-forward"
-                                    size={18}
-                                    color="#FFFFFF"
-                                    style={styles.createButtonIcon}
-                                />
+                                <Text style={styles.createButtonText}>
+                                    {saving ? "Saving..." : "Create Profile"}
+                                </Text>
+                                {!saving && (
+                                    <Ionicons
+                                        name="arrow-forward"
+                                        size={18}
+                                        color="#FFFFFF"
+                                        style={styles.createButtonIcon}
+                                    />
+                                )}
                             </TouchableOpacity>
                         </View>
                     </ScrollView>
@@ -324,8 +338,6 @@ const styles = StyleSheet.create({
         paddingTop: 24,
         paddingBottom: 32,
     },
-
-    /* Stepper */
     stepperContainer: {
         flexDirection: "row",
         alignItems: "center",
@@ -363,8 +375,6 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.border,
         marginHorizontal: 6,
     },
-
-    /* Header */
     header: {
         marginBottom: 32,
     },
@@ -380,8 +390,6 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
         lineHeight: 22,
     },
-
-    /* Form */
     form: {
         flex: 1,
     },
@@ -416,8 +424,6 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: COLORS.textPrimary,
     },
-
-    /* Multiline specific styles */
     multilineContainer: {
         alignItems: "flex-start",
         height: "auto",
@@ -431,8 +437,6 @@ const styles = StyleSheet.create({
         textAlignVertical: "top",
         paddingVertical: 0,
     },
-
-    /* Primary CTA */
     createButton: {
         flexDirection: "row",
         alignItems: "center",

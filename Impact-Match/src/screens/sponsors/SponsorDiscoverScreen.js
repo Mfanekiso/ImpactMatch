@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,51 +10,14 @@ import {
   Modal,
   SafeAreaView,
   StatusBar,
-  Animated,
+  ActivityIndicator,
 } from "react-native";
 
-// --- MOCK DATA ---
-const ORGANISATIONS_DATA = [
-  {
-    id: "org-1",
-    name: "Education For All",
-    abbrev: "EFA",
-    match: "92%",
-    verified: true,
-    location: "Johannesburg, SA",
-    causes: ["Education", "Youth Development"],
-    description:
-      "Providing quality education and digital literacy programmes to underserved youth in South Africa.",
-    fundingNeed: "R150k – R300k",
-    bgStyle: { backgroundColor: "#1D3557" },
-    beneficiaries: "15,000",
-    projectsCount: 12,
-    communities: 14,
-    yearsActive: 8,
-    about:
-      "Education For All is dedicated to bridging the digital divide across South Africa by facilitating access to modern technology and structured digital literacy education.",
-  },
-  {
-    id: "org-2",
-    name: "GreenRoots Africa",
-    abbrev: "GRA",
-    match: "87%",
-    verified: true,
-    location: "Cape Town, SA",
-    causes: ["Environment", "Community Development"],
-    description:
-      "Restoring degraded ecosystems and building climate resilience through environmental stewardship.",
-    fundingNeed: "R100k – R250k",
-    bgStyle: { backgroundColor: "#2A9D8F" },
-    beneficiaries: "9,200",
-    projectsCount: 6,
-    communities: 8,
-    yearsActive: 9,
-    about:
-      "GreenRoots works with local communities to restore fynbos, manage invasive species, and create sustainable livelihoods through environmental stewardship.",
-  },
-];
+// Firebase imports
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../../../Backend/firebaseConfig";
 
+// --- MOCK DATA (Projects tab only — no real "projects" collection exists yet) ---
 const PROJECTS_DATA = [
   {
     id: "proj-1",
@@ -100,12 +63,27 @@ const PROJECTS_DATA = [
   },
 ];
 
+const AVATAR_COLORS = ["#1D3557", "#2A9D8F", "#7C3AED", "#C2410C", "#0EA5E9", "#DB2777"];
+
+function getInitials(name) {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export default function SponsorDiscoverScreen() {
-  // State variables
-    const [activeTab, setActiveTab] = useState("Organisations"); // 'Organisations' | 'Projects'
-    const [searchQuery, setSearchQuery] = useState("");
-    const [favorites, setFavorites] = useState({});
-    const [sponsorshipProject, setSponsorshipProject] = useState(null);
+  const [activeTab, setActiveTab] = useState("Organisations"); // 'Organisations' | 'Projects'
+  const [searchQuery, setSearchQuery] = useState("");
+  const [favorites, setFavorites] = useState({});
+  const [sponsorshipProject, setSponsorshipProject] = useState(null);
+
+  // Real NGO data from Firestore
+  const [ngos, setNgos] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Filter state
   const [isFilterModalVisible, setFilterModalVisible] = useState(false);
@@ -117,6 +95,43 @@ export default function SponsorDiscoverScreen() {
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
 
+  // Fetch every user document where role == "ngo"
+  useEffect(() => {
+    const fetchNgos = async () => {
+      try {
+        const ngoQuery = query(collection(db, "users"), where("role", "==", "ngo"));
+        const snapshot = await getDocs(ngoQuery);
+
+        const results = snapshot.docs.map((docSnap, index) => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            name: data.organisationName || "Unnamed NGO",
+            abbrev: getInitials(data.organisationName),
+            verified: !!data.profileCompleted,
+            location: data.location || "Location not provided",
+            // targetCommunity is a free-text field, not a list — treat it as a single "cause" tag
+            causes: data.targetCommunity ? [data.targetCommunity] : [],
+            description: data.mission || "No mission statement provided yet.",
+            fundingNeed: data.fundingRequired ? `R${data.fundingRequired}` : "Not specified",
+            bgStyle: { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] },
+            profileImageUrl: data.profileImageUrl || null,
+            email: data.email || "Not provided",
+            about: data.mission || "No further details provided yet.",
+          };
+        });
+
+        setNgos(results);
+      } catch (error) {
+        console.log("Error fetching NGOs:", error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNgos();
+  }, []);
+
   // Toggle favorite helper
   const toggleFavorite = (id) => {
     setFavorites((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -124,7 +139,7 @@ export default function SponsorDiscoverScreen() {
 
   // Filtered lists
   const filteredOrganisations = useMemo(() => {
-    return ORGANISATIONS_DATA.filter((org) => {
+    return ngos.filter((org) => {
       const matchesSearch =
         org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         org.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -137,7 +152,7 @@ export default function SponsorDiscoverScreen() {
 
       return matchesSearch && matchesCause && matchesLocation && matchesVerified;
     });
-  }, [searchQuery, selectedCause, selectedLocation, verifiedOnly]);
+  }, [ngos, searchQuery, selectedCause, selectedLocation, verifiedOnly]);
 
   const filteredProjects = useMemo(() => {
     return PROJECTS_DATA.filter((proj) => {
@@ -222,180 +237,174 @@ export default function SponsorDiscoverScreen() {
         </View>
 
         {/* --- LIST VIEW --- */}
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {activeTab === "Organisations" ? (
-            /* ORGANISATIONS CARDS */
-            filteredOrganisations.map((org) => (
-              <View key={org.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={[styles.avatar, org.bgStyle]}>
-                    <Text style={styles.avatarText}>{org.abbrev}</Text>
-                  </View>
-                  <View style={styles.cardHeaderContent}>
-                    <View style={styles.titleRow}>
-                      <Text style={styles.orgTitle}>{org.name}</Text>
-                      <View style={styles.matchBadge}>
-                        <Text style={styles.matchBadgeText}>• {org.match}</Text>
+        {activeTab === "Organisations" && loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#227B53" />
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            {activeTab === "Organisations" ? (
+              filteredOrganisations.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>
+                    {ngos.length === 0
+                      ? "No NGOs have signed up yet."
+                      : "No organisations match your search or filters."}
+                  </Text>
+                </View>
+              ) : (
+                /* ORGANISATIONS CARDS */
+                filteredOrganisations.map((org) => (
+                  <View key={org.id} style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      {org.profileImageUrl ? (
+                        <Image
+                          source={{ uri: org.profileImageUrl }}
+                          style={styles.avatarImage}
+                        />
+                      ) : (
+                        <View style={[styles.avatar, org.bgStyle]}>
+                          <Text style={styles.avatarText}>{org.abbrev}</Text>
+                        </View>
+                      )}
+                      <View style={styles.cardHeaderContent}>
+                        <View style={styles.titleRow}>
+                          <Text style={styles.orgTitle}>{org.name}</Text>
+                        </View>
+
+                        {org.verified && (
+                          <View style={styles.verifiedRow}>
+                            <Text style={styles.verifiedIcon}>✓</Text>
+                            <Text style={styles.verifiedText}>Verified</Text>
+                          </View>
+                        )}
+
+                        <Text style={styles.locationText}>📍 {org.location}</Text>
                       </View>
                     </View>
 
-                    {org.verified && (
-                      <View style={styles.verifiedRow}>
-                        <Text style={styles.verifiedIcon}>✓</Text>
-                        <Text style={styles.verifiedText}>Verified</Text>
+                    {/* Causes Chips */}
+                    {org.causes.length > 0 && (
+                      <View style={styles.chipRow}>
+                        {org.causes.map((cause, idx) => (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.chip,
+                              idx % 2 === 1 ? styles.chipYellow : styles.chipBlue,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.chipText,
+                                idx % 2 === 1
+                                  ? styles.chipYellowText
+                                  : styles.chipBlueText,
+                              ]}
+                            >
+                              {cause}
+                            </Text>
+                          </View>
+                        ))}
                       </View>
                     )}
 
-                    <Text style={styles.locationText}>📍 {org.location}</Text>
-                  </View>
-                </View>
+                    <Text style={styles.descriptionText} numberOfLines={2}>
+                      {org.description}
+                    </Text>
 
-                {/* Causes Chips */}
-                <View style={styles.chipRow}>
-                  {org.causes.map((cause, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.chip,
-                        idx % 2 === 1 ? styles.chipYellow : styles.chipBlue,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          idx % 2 === 1
-                            ? styles.chipYellowText
-                            : styles.chipBlueText,
-                        ]}
+                    <Text style={styles.fundingText}>
+                      Funding Need:{" "}
+                      <Text style={styles.fundingHighlight}>{org.fundingNeed}</Text>
+                    </Text>
+
+                    <View style={styles.cardActionRow}>
+                      <TouchableOpacity
+                        style={styles.primaryButton}
+                        onPress={() => setSelectedOrg(org)}
                       >
-                        {cause}
-                      </Text>
+                        <Text style={styles.primaryButtonText}>View Profile</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.favoriteButton}
+                        onPress={() => toggleFavorite(org.id)}
+                      >
+                        <Text style={styles.heartIcon}>
+                          {favorites[org.id] ? "❤️" : "🤍"}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
-                  ))}
-                </View>
-
-                <Text style={styles.descriptionText} numberOfLines={2}>
-                  {org.description}
-                </Text>
-
-                <Text style={styles.fundingText}>
-                  Funding Need:{" "}
-                  <Text style={styles.fundingHighlight}>{org.fundingNeed}</Text>
-                </Text>
-
-                <View style={styles.cardActionRow}>
-                  <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={() => setSelectedOrg(org)}
-                  >
-                    <Text style={styles.primaryButtonText}>View Profile</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.favoriteButton}
-                    onPress={() => toggleFavorite(org.id)}
-                  >
-                    <Text style={styles.heartIcon}>
-                      {favorites[org.id] ? "❤️" : "🤍"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          ) : (
-            /* PROJECTS CARDS */
-            filteredProjects.map((proj) => (
-              <View key={proj.id} style={styles.card}>
-                <View style={styles.projectImageContainer}>
-                  <Image
-                    source={{ uri: proj.image }}
-                    style={styles.projectImage}
-                  />
-                  <View style={styles.projectImageChip}>
-                    <Text style={styles.chipBlueText}>{proj.cause}</Text>
                   </View>
-                  <View style={styles.projectMatchBadge}>
-                    <Text style={styles.matchBadgeText}>• {proj.match}</Text>
+                ))
+              )
+            ) : (
+              /* PROJECTS CARDS (still mock — no real projects collection yet) */
+              filteredProjects.map((proj) => (
+                <View key={proj.id} style={styles.card}>
+                  <View style={styles.projectImageContainer}>
+                    <Image
+                      source={{ uri: proj.image }}
+                      style={styles.projectImage}
+                    />
+                    <View style={styles.projectImageChip}>
+                      <Text style={styles.chipBlueText}>{proj.cause}</Text>
+                    </View>
+                    <View style={styles.projectMatchBadge}>
+                      <Text style={styles.matchBadgeText}>• {proj.match}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.projectTitle}>{proj.title}</Text>
+                  <Text style={styles.projectSubTitle}>
+                    {proj.orgName} • {proj.location}
+                  </Text>
+
+                  <Text style={styles.descriptionText} numberOfLines={2}>
+                    {proj.description}
+                  </Text>
+
+                  {/* Progress Bar */}
+                  <View style={styles.progressBarContainer}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        { width: `${proj.progressRatio * 100}%` },
+                      ]}
+                    />
+                  </View>
+
+                  <View style={styles.progressLabelRow}>
+                    <Text style={styles.progressTextGreen}>
+                      {proj.raised} raised
+                    </Text>
+                    <Text style={styles.progressTextGray}>
+                      {proj.percent} of {proj.goal}
+                    </Text>
+                  </View>
+
+                  <View style={styles.cardActionRow}>
+                    <TouchableOpacity
+                      style={styles.primaryButton}
+                      onPress={() => setSelectedProject(proj)}
+                    >
+                      <Text style={styles.primaryButtonText}>View Project</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.favoriteButton}
+                      onPress={() => toggleFavorite(proj.id)}
+                    >
+                      <Text style={styles.heartIcon}>
+                        {favorites[proj.id] ? "❤️" : "🤍"}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-
-                <Text style={styles.projectTitle}>{proj.title}</Text>
-                <Text style={styles.projectSubTitle}>
-                  {proj.orgName} • {proj.location}
-                </Text>
-
-                <Text style={styles.descriptionText} numberOfLines={2}>
-                  {proj.description}
-                </Text>
-
-                {/* Progress Bar */}
-                <View style={styles.progressBarContainer}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      { width: `${proj.progressRatio * 100}%` },
-                    ]}
-                  />
-                </View>
-
-                <View style={styles.progressLabelRow}>
-                  <Text style={styles.progressTextGreen}>
-                    {proj.raised} raised
-                  </Text>
-                  <Text style={styles.progressTextGray}>
-                    {proj.percent} of {proj.goal}
-                  </Text>
-                </View>
-
-                <View style={styles.cardActionRow}>
-                  <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={() => setSelectedProject(proj)}
-                  >
-                    <Text style={styles.primaryButtonText}>View Project</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.favoriteButton}
-                    onPress={() => toggleFavorite(proj.id)}
-                  >
-                    <Text style={styles.heartIcon}>
-                      {favorites[proj.id] ? "❤️" : "🤍"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </ScrollView>
-{/* 
-        --- BOTTOM NAVIGATION BAR ---
-        <View style={styles.bottomNav}>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>🏠</Text>
-            <Text style={styles.navLabel}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={[styles.navIcon, styles.activeNavIcon]}>🔍</Text>
-            <Text style={[styles.navLabel, styles.activeNavLabel]}>Discover</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>🤝</Text>
-            <Text style={styles.navLabel}>Matches</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>💬</Text>
-            <Text style={styles.navLabel}>Messages</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>📊</Text>
-            <Text style={styles.navLabel}>Impact</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>👤</Text>
-            <Text style={styles.navLabel}>Profile</Text>
-          </TouchableOpacity>
-        </View> */}
+              ))
+            )}
+          </ScrollView>
+        )}
 
         {/* --- FILTER MODAL --- */}
         <Modal
@@ -561,39 +570,26 @@ export default function SponsorDiscoverScreen() {
                     }}
                     style={styles.detailBannerImage}
                   />
-                  <View style={[styles.detailAvatar, selectedOrg.bgStyle]}>
-                    <Text style={styles.detailAvatarText}>
-                      {selectedOrg.abbrev}
-                    </Text>
-                  </View>
+                  {selectedOrg.profileImageUrl ? (
+                    <Image
+                      source={{ uri: selectedOrg.profileImageUrl }}
+                      style={styles.detailAvatarImage}
+                    />
+                  ) : (
+                    <View style={[styles.detailAvatar, selectedOrg.bgStyle]}>
+                      <Text style={styles.detailAvatarText}>
+                        {selectedOrg.abbrev}
+                      </Text>
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.detailContent}>
                   <Text style={styles.detailTitle}>{selectedOrg.name}</Text>
                   <View style={styles.detailSubRow}>
                     <Text style={styles.verifiedText}>
-                      ✓ Verified • {selectedOrg.location} NPO
+                      {selectedOrg.verified ? "✓ Verified" : "Not yet verified"} • {selectedOrg.location}
                     </Text>
-                  </View>
-
-                  {/* Match Banner Card */}
-                  <View style={styles.matchCard}>
-                    <View>
-                      <Text style={styles.matchCardTitle}>
-                        {selectedOrg.match} Match
-                      </Text>
-                      <Text style={styles.matchCardSub}>
-                        Based on your CSR profile and preferences
-                      </Text>
-                      <Text style={styles.matchLink}>
-                        See Why You Match ›
-                      </Text>
-                    </View>
-                    <View style={styles.matchCircle}>
-                      <Text style={styles.matchCircleText}>
-                        {selectedOrg.match}
-                      </Text>
-                    </View>
                   </View>
 
                   <TouchableOpacity style={styles.expressInterestButton}>
@@ -602,47 +598,31 @@ export default function SponsorDiscoverScreen() {
                     </Text>
                   </TouchableOpacity>
 
-                  {/* Stats Grid */}
-                  <View style={styles.statsGrid}>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>
-                        {selectedOrg.beneficiaries}
-                      </Text>
-                      <Text style={styles.statLabel}>Beneficiaries</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>
-                        {selectedOrg.projectsCount}
-                      </Text>
-                      <Text style={styles.statLabel}>Projects</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>
-                        {selectedOrg.communities}
-                      </Text>
-                      <Text style={styles.statLabel}>Communities</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>
-                        {selectedOrg.yearsActive}
-                      </Text>
-                      <Text style={styles.statLabel}>Years</Text>
-                    </View>
-                  </View>
+                  {/* Contact */}
+                  <Text style={styles.sectionHeader}>Contact</Text>
+                  <Text style={styles.bodyText}>{selectedOrg.email}</Text>
 
                   {/* About */}
-                  <Text style={styles.sectionHeader}>About</Text>
+                  <Text style={styles.sectionHeader}>Mission</Text>
                   <Text style={styles.bodyText}>{selectedOrg.about}</Text>
 
+                  {/* Funding Need */}
+                  <Text style={styles.sectionHeader}>Funding Need</Text>
+                  <Text style={styles.bodyText}>{selectedOrg.fundingNeed}</Text>
+
                   {/* Causes */}
-                  <Text style={styles.sectionHeader}>Causes</Text>
-                  <View style={styles.chipRow}>
-                    {selectedOrg.causes.map((c, i) => (
-                      <View key={i} style={[styles.chip, styles.chipGreen]}>
-                        <Text style={styles.chipGreenText}>{c}</Text>
+                  {selectedOrg.causes.length > 0 && (
+                    <>
+                      <Text style={styles.sectionHeader}>Community Served</Text>
+                      <View style={styles.chipRow}>
+                        {selectedOrg.causes.map((c, i) => (
+                          <View key={i} style={[styles.chip, styles.chipGreen]}>
+                            <Text style={styles.chipGreenText}>{c}</Text>
+                          </View>
+                        ))}
                       </View>
-                    ))}
-                  </View>
+                    </>
+                  )}
                 </View>
               </ScrollView>
             </SafeAreaView>
@@ -769,21 +749,20 @@ export default function SponsorDiscoverScreen() {
                     <TouchableOpacity style={styles.contactNgoButton}>
                       <Text style={styles.contactNgoText}>Contact NGO</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                    style={styles.sponsorProjectButton}
-                    onPress={() => setSponsorshipProject(selectedProject)}
+                    <TouchableOpacity
+                      style={styles.sponsorProjectButton}
+                      onPress={() => setSponsorshipProject(selectedProject)}
                     >
-                    <Text style={styles.primaryButtonText}>
+                      <Text style={styles.primaryButtonText}>
                         Sponsor This Project
-                    </Text>
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               </ScrollView>
             </SafeAreaView>
           </Modal>
-              )}
-
+        )}
       </View>
     </SafeAreaView>
   );
@@ -793,7 +772,10 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#FFF" },
   container: { flex: 1, backgroundColor: "#F8FAFC" },
 
-  /* Header */
+  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 60 },
+  emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 40 },
+  emptyStateText: { fontSize: 14, color: "#64748B", textAlign: "center" },
+
   headerContainer: {
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -833,7 +815,6 @@ const styles = StyleSheet.create({
   },
   filterIcon: { fontSize: 18 },
 
-  /* Tabs */
   tabContainer: {
     flexDirection: "row",
     backgroundColor: "#F1F5F9",
@@ -858,7 +839,6 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, color: "#64748B", fontWeight: "600" },
   activeTabText: { color: "#0F172A" },
 
-  /* List & Cards */
   scrollContent: { padding: 16 },
   card: {
     backgroundColor: "#FFF",
@@ -877,6 +857,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
+  avatarImage: { width: 48, height: 48, borderRadius: 24, marginRight: 12 },
   avatarText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
   cardHeaderContent: { flex: 1 },
   titleRow: {
@@ -904,7 +885,6 @@ const styles = StyleSheet.create({
   verifiedText: { fontSize: 12, color: "#166534", fontWeight: "500" },
   locationText: { fontSize: 12, color: "#64748B", marginTop: 2 },
 
-  /* Chips */
   chipRow: { flexDirection: "row", flexWrap: "wrap", marginVertical: 8 },
   chip: {
     paddingHorizontal: 10,
@@ -929,7 +909,6 @@ const styles = StyleSheet.create({
   fundingText: { fontSize: 12, color: "#0F172A", fontWeight: "600" },
   fundingHighlight: { color: "#0F172A" },
 
-  /* Card Actions */
   cardActionRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -955,7 +934,6 @@ const styles = StyleSheet.create({
   },
   heartIcon: { fontSize: 18 },
 
-  /* Projects Card Specific */
   projectImageContainer: {
     height: 140,
     borderRadius: 12,
@@ -974,7 +952,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  /* Progress Bar */
   progressBarContainer: {
     height: 6,
     backgroundColor: "#E2E8F0",
@@ -991,21 +968,6 @@ const styles = StyleSheet.create({
   progressTextGreen: { fontSize: 12, color: "#227B53", fontWeight: "600" },
   progressTextGray: { fontSize: 12, color: "#64748B" },
 
-  /* Bottom Navigation */
-  bottomNav: {
-    flexDirection: "row",
-    backgroundColor: "#FFF",
-    borderTopWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingVertical: 8,
-  },
-  navItem: { flex: 1, alignItems: "center" },
-  navIcon: { fontSize: 18, color: "#64748B" },
-  navLabel: { fontSize: 10, color: "#64748B", marginTop: 2 },
-  activeNavIcon: { color: "#227B53" },
-  activeNavLabel: { color: "#227B53", fontWeight: "700" },
-
-  /* Filter Modal */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -1068,7 +1030,6 @@ const styles = StyleSheet.create({
   },
   applyButtonText: { color: "#FFF", fontWeight: "600" },
 
-  /* Details Screen Modals */
   detailHeaderNav: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1093,49 +1054,26 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: "#FFF",
   },
+  detailAvatarImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    position: "absolute",
+    bottom: -32,
+    left: 16,
+    borderWidth: 3,
+    borderColor: "#FFF",
+  },
   detailAvatarText: { color: "#FFF", fontWeight: "700" },
   detailContent: { paddingHorizontal: 16 },
   detailTitle: { fontSize: 20, fontWeight: "700", color: "#0F172A" },
   detailSubRow: { flexDirection: "row", marginTop: 4, marginBottom: 12 },
-
-  matchCard: {
-    backgroundColor: "#F0FDF4",
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
-    borderRadius: 12,
-    padding: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  matchCardTitle: { fontSize: 16, fontWeight: "700", color: "#166534" },
-  matchCardSub: { fontSize: 11, color: "#15803D", marginVertical: 2 },
-  matchLink: { fontSize: 12, fontWeight: "600", color: "#166534", marginTop: 4 },
-  matchCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 3,
-    borderColor: "#166534",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  matchCircleText: { fontSize: 10, fontWeight: "700", color: "#166534" },
 
   expressInterestButton: {
     backgroundColor: "#227B53",
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
-    marginBottom: 16,
-  },
-  statsGrid: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    paddingVertical: 12,
     marginBottom: 16,
   },
   statItem: { alignItems: "center" },
@@ -1151,7 +1089,6 @@ const styles = StyleSheet.create({
   },
   bodyText: { fontSize: 13, color: "#475569", lineHeight: 20 },
 
-  /* Project Details Specific */
   projectDetailBanner: { height: 200, position: "relative" },
   projectDetailImage: { width: "100%", height: "100%" },
   projectDetailOverlay: {
