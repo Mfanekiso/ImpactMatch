@@ -14,7 +14,11 @@ import {
     TouchableWithoutFeedback,
     Keyboard,
 } from "react-native";
-import Ionicons from '@react-native-vector-icons/ionicons'
+import Ionicons from '@react-native-vector-icons/ionicons';
+
+// Firebase imports
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../../../Backend/firebaseConfig"; // Adjust path if needed
 
 const COLORS = {
     background: "#FFFFFF",
@@ -29,7 +33,10 @@ const COLORS = {
     white: "#FFFFFF",
 };
 
-export default function SponsorSetupScreen({ navigation }) {
+export default function SponsorSetupScreen({ route, navigation }) {
+    // 1. Extract the uid and role passed from the previous screen
+    const { uid, role } = route.params || {};
+
     const [organisationName, setOrganisationName] = useState("");
     const [industry, setIndustry] = useState("");
     const [location, setLocation] = useState("");
@@ -37,7 +44,8 @@ export default function SponsorSetupScreen({ navigation }) {
     const [preferredCauses, setPreferredCauses] = useState("");
     const [focusedField, setFocusedField] = useState(null);
 
-    const handleContinue = () => {
+    // 2. Make this function async to connect to Firestore
+    const handleContinue = async () => {
         if (
             !organisationName.trim() ||
             !industry.trim() ||
@@ -52,16 +60,27 @@ export default function SponsorSetupScreen({ navigation }) {
             return;
         }
 
-        navigation.navigate('SponsorTabs', {
-            screen: 'Home',
-            params: {
-                organisationName,
-                industry,
-                location,
-                fundingBudget,
-                preferredCauses,
-            },
-        });
+        try {
+            // 3. Update the existing document in the "users" collection
+            const userRef = doc(db, "users", uid);
+            await updateDoc(userRef, {
+                role: role,
+                organisationName: organisationName,
+                industry: industry,
+                location: location,
+                fundingBudget: fundingBudget,   
+                preferredCauses: preferredCauses,
+                profileCompleted: true // Flag to indicate profile setup is done
+            });
+
+            // 4. Navigate to the Sponsor home screen
+            navigation.navigate('SponsorTabs', {
+                screen: 'Home'
+            });
+
+        } catch (error) {
+            Alert.alert("Error Saving Profile", error.message);
+        }
     };
 
     return (

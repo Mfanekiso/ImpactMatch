@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
     View,
     Text,
@@ -23,7 +23,18 @@ const COLORS = {
     white: "#FFFFFF",
 };
 
-export default function UserTypeScreen({ navigation }) {
+
+
+export default function UserTypeScreen({ route, navigation }) {
+    console.log("this is the id", route.params)
+    // Extract the uid passed from SignUpScreen
+
+        const { uid } = route.params || {};
+
+    useEffect(() => {
+        console.log("USER UID:", uid);
+    }, [uid]);
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -52,11 +63,6 @@ export default function UserTypeScreen({ navigation }) {
                         <Text style={styles.stepTextInactive}>3</Text>
                     </View>
                     <View style={styles.stepLine} />
-
-                    {/* Step 4 */}
-                    <View style={[styles.stepCircle, styles.stepInactive]}>
-                        <Text style={styles.stepTextInactive}>4</Text>
-                    </View>
                 </View>
 
                 {/* Header */}
@@ -73,7 +79,7 @@ export default function UserTypeScreen({ navigation }) {
                     <TouchableOpacity
                         style={styles.card}
                         activeOpacity={0.8}
-                        onPress={() => navigation.navigate("NGOSetup")}
+                        onPress={() => navigation.navigate("NGOSetup", { uid: uid, role: "ngo" })}
                     >
                         <View style={styles.iconWrapper}>
                             <Ionicons name="people-outline" size={24} color={COLORS.primary} />
@@ -91,7 +97,7 @@ export default function UserTypeScreen({ navigation }) {
                     <TouchableOpacity
                         style={styles.card}
                         activeOpacity={0.8}
-                        onPress={() => navigation.navigate("SponsorSetup")}
+                        onPress={() => navigation.navigate("SponsorSetup", { uid: uid, role: "sponsor" })}
                     >
                         <View style={styles.iconWrapper}>
                             <Ionicons name="briefcase-outline" size={24} color={COLORS.primary} />

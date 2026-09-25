@@ -12,11 +12,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 
 import opportunities from "../../data/opportunities";
 import projects from "../../data/projects";
-import {
-    formatCurrency,
-    formatCurrencyShort,
-    formatFundingRange,
-} from "../../utils/formatCurrency";
+
 
 const COLORS = {
     background: "#F9FAFB",
