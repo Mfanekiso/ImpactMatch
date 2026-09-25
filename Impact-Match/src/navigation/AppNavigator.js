@@ -20,6 +20,7 @@ import NGOProfileScreen from "../screens/ngo/NGOProfileScreen";
 import OpportunitiesScreen from "../screens/ngo/OpportunitiesScreen";
 import SponsorNavigator from "./SponsorNavigator";
 import SponsorSetupScreen from "../screens/sponsors/SponsorSetupScreen";
+import SponsorMatchDetailsScreen from "../screens/sponsors/SponsorMatchDetailsScreen";
 
 // Initialize Navigators
 const Tab = createBottomTabNavigator();
@@ -109,6 +110,7 @@ export default function AppNavigator() {
                 
                 {/* Detail Screens (Placed here so they cover the bottom bar when opened) */}
                 <Stack.Screen name="SponsorDetails" component={SponsorDetailsScreen} />
+                <Stack.Screen name="SponsorMatchDetails" component={SponsorMatchDetailsScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );
