@@ -768,6 +768,178 @@ export default function SponsorDiscoverScreen() {
   );
 }
 
+function ProjectCard({ project, onPress }) {
+    const percentFunded = Math.min(100, Math.round((project.raised / project.goal) * 100));
+
+    return (
+        <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onPress}>
+            <View style={styles.cardTopRow}>
+                <View style={[styles.orgLogo, { backgroundColor: project.color }]}>
+                    <Ionicons name={project.icon} size={20} color={COLORS.white} />
+                </View>
+
+                <View style={styles.cardTitleBlock}>
+                    <Text style={styles.orgName} numberOfLines={2}>
+                        {project.title}
+                    </Text>
+                    <Text style={styles.projectOrgName} numberOfLines={1}>
+                        {project.orgName}
+                    </Text>
+                </View>
+
+                <View style={styles.matchPill}>
+                    <View style={styles.matchDot} />
+                    <Text style={styles.matchPillText}>{project.matchScore}%</Text>
+                </View>
+            </View>
+
+            <View style={[styles.tagPill, styles.projectCategoryPill, { backgroundColor: getTagStyle(project.category).bg }]}>
+                <Text style={[styles.tagPillText, { color: getTagStyle(project.category).text }]}>
+                    {project.category}
+                </Text>
+            </View>
+
+            <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${percentFunded}%` }]} />
+            </View>
+
+            <View style={styles.progressLabelsRow}>
+                <Text style={styles.progressRaised}>{formatCurrency(project.raised)} raised</Text>
+                <Text style={styles.progressPercent}>
+                    {percentFunded}% of {formatCurrency(project.goal)}
+                </Text>
+            </View>
+        </TouchableOpacity>
+    );
+}
+
+export default function SponsorDiscoverScreen({ navigation }) {
+    const [searchQuery, setSearchQuery] = useState("");
+    const [activeTab, setActiveTab] = useState("organisations"); // "organisations" | "projects"
+    const [savedIds, setSavedIds] = useState([]);
+
+    const toggleSaved = (id) => {
+        setSavedIds((prev) =>
+            prev.includes(id) ? prev.filter((savedId) => savedId !== id) : [...prev, id]
+        );
+    };
+
+    const filteredOpportunities = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) return opportunities;
+        return opportunities.filter((org) => {
+            const haystack = [org.name, org.location, ...org.tags].join(" ").toLowerCase();
+            return haystack.includes(query);
+        });
+    }, [searchQuery]);
+
+    const filteredProjects = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) return projects;
+        return projects.filter((project) => {
+            const haystack = [project.title, project.orgName, project.category]
+                .join(" ")
+                .toLowerCase();
+            return haystack.includes(query);
+        });
+    }, [searchQuery]);
+
+    const goToOpportunity = (opportunity) => {
+        navigation.navigate("SponsorOpportunityDetails", { opportunity });
+    };
+
+    return (
+        <SafeAreaView style={styles.safeArea}>
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>Discover Impact</Text>
+
+                <View style={styles.searchRow}>
+                    <View style={styles.searchBar}>
+                        <Ionicons name="search-outline" size={18} color={COLORS.textSecondary} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search NGOs, projects or causes"
+                            placeholderTextColor={COLORS.textSecondary}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                    </View>
+
+                    <TouchableOpacity style={styles.filterButton} activeOpacity={0.7}>
+                        {/* TODO: wire up a real filter modal (cause, location, funding range) */}
+                        <Ionicons name="options-outline" size={18} color={COLORS.textPrimary} />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.tabTrack}>
+                    <TouchableOpacity
+                        style={[styles.tab, activeTab === "organisations" && styles.tabActive]}
+                        activeOpacity={0.8}
+                        onPress={() => setActiveTab("organisations")}
+                    >
+                        <Text
+                            style={[
+                                styles.tabText,
+                                activeTab === "organisations" && styles.tabTextActive,
+                            ]}
+                        >
+                            Organisations
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.tab, activeTab === "projects" && styles.tabActive]}
+                        activeOpacity={0.8}
+                        onPress={() => setActiveTab("projects")}
+                    >
+                        <Text
+                            style={[
+                                styles.tabText,
+                                activeTab === "projects" && styles.tabTextActive,
+                            ]}
+                        >
+                            Projects
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            <ScrollView
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {activeTab === "organisations" ? (
+                    filteredOpportunities.length > 0 ? (
+                        filteredOpportunities.map((org) => (
+                            <OrgCard
+                                key={org.id}
+                                org={org}
+                                saved={savedIds.includes(org.id)}
+                                onToggleSave={() => toggleSaved(org.id)}
+                                onPress={() => goToOpportunity(org)}
+                            />
+                        ))
+                    ) : (
+                        <Text style={styles.emptyText}>No organisations match your search.</Text>
+                    )
+                ) : filteredProjects.length > 0 ? (
+                    filteredProjects.map((project) => (
+                        <ProjectCard
+                            key={project.id}
+                            project={project}
+                            onPress={() => {}}
+                        />
+                    ))
+                ) : (
+                    <Text style={styles.emptyText}>No projects match your search.</Text>
+                )}
+            </ScrollView>
+        </SafeAreaView>
+    );
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#FFF" },
   container: { flex: 1, backgroundColor: "#F8FAFC" },
