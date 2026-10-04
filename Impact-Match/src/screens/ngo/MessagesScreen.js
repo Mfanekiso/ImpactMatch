@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
     View,
     Text,
@@ -7,8 +7,19 @@ import {
     FlatList,
     SafeAreaView,
     StatusBar,
+    ActivityIndicator,
 } from "react-native";
+
 import Ionicons from "@react-native-vector-icons/ionicons";
+
+import {
+    collection,
+    query,
+    where,
+    onSnapshot,
+} from "firebase/firestore";
+
+import { auth, db } from "../../../Backend/firebaseConfig";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -22,103 +33,298 @@ const COLORS = {
     white: "#FFFFFF",
 };
 
-// Placeholder data — swap this out with real conversations later.
-const conversations = [];
-// Example shape when data arrives:
-// {
-//   id: "1",
-//   name: "Green Earth Foundation",
-//   lastMessage: "Thanks for reaching out!",
-//   time: "10:24",
-//   unreadCount: 2,
-// }
-
 export default function MessagesScreen({ navigation }) {
-    const hasConversations = conversations.length > 0;
+    const [conversations, setConversations] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // =====================================================
+    // LOAD REAL-TIME CONVERSATIONS
+    // =====================================================
+
+    useEffect(() => {
+        const currentUser = auth.currentUser;
+
+        if (!currentUser) {
+            setLoading(false);
+            return;
+        }
+
+        const conversationsRef = collection(db, "conversations");
+
+        const conversationsQuery = query(
+            conversationsRef,
+            where("participants", "array-contains", currentUser.uid)
+        );
+
+        const unsubscribe = onSnapshot(
+            conversationsQuery,
+            (snapshot) => {
+                const conversationList = snapshot.docs.map((doc) => {
+                    const data = doc.data();
+
+                    const otherUserId =
+                        data.participants?.find(
+                            (id) => id !== currentUser.uid
+                        );
+
+                    const otherUser =
+                        data.participantDetails?.[otherUserId];
+
+                    return {
+                        id: doc.id,
+
+                        name:
+                            otherUser?.name ||
+                            "Unknown User",
+
+                        role:
+                            otherUser?.role ||
+                            "",
+
+                        lastMessage:
+                            data.lastMessage ||
+                            "No messages yet",
+
+                        time:
+                            data.lastMessageAt
+                                ? formatTime(
+                                      data.lastMessageAt
+                                  )
+                                : "",
+
+                        unreadCount:
+                            data.unreadCount?.[
+                                currentUser.uid
+                            ] || 0,
+                    };
+                });
+
+                // Newest conversation first
+                conversationList.sort((a, b) => {
+                    return b.lastMessageAt - a.lastMessageAt;
+                });
+
+                setConversations(conversationList);
+                setLoading(false);
+            },
+            (error) => {
+                console.log(
+                    "Error loading conversations:",
+                    error
+                );
+
+                setLoading(false);
+            }
+        );
+
+        return unsubscribe;
+    }, []);
+
+    // =====================================================
+    // START CHAT
+    // =====================================================
 
     const handleStartChat = () => {
-        // navigation.navigate("NewChat");
+        navigation.navigate("NewChat");
     };
+
+    // =====================================================
+    // OPEN CHAT
+    // =====================================================
+
+    const openConversation = (conversationId) => {
+        navigation.navigate("Chat", {
+            conversationId,
+        });
+    };
+
+    // =====================================================
+    // CONVERSATION ITEM
+    // =====================================================
 
     const renderConversation = ({ item }) => (
         <TouchableOpacity
             style={styles.conversationRow}
             activeOpacity={0.7}
-            // onPress={() => navigation.navigate("Chat", { conversationId: item.id })}
+            onPress={() =>
+                openConversation(item.id)
+            }
         >
             <View style={styles.avatar}>
-                <Ionicons name="person-outline" size={22} color={COLORS.primary} />
+                <Ionicons
+                    name="person-outline"
+                    size={22}
+                    color={COLORS.primary}
+                />
             </View>
 
             <View style={styles.conversationContent}>
+
                 <View style={styles.conversationTopRow}>
-                    <Text style={styles.conversationName} numberOfLines={1}>
-                        {item.name}
+
+                    <View style={styles.nameContainer}>
+
+                        <Text
+                            style={styles.conversationName}
+                            numberOfLines={1}
+                        >
+                            {item.name}
+                        </Text>
+
+                        {item.role ? (
+                            <Text style={styles.roleText}>
+                                {item.role === "ngo"
+                                    ? "NGO"
+                                    : "Sponsor"}
+                            </Text>
+                        ) : null}
+
+                    </View>
+
+                    <Text
+                        style={styles.conversationTime}
+                    >
+                        {item.time}
                     </Text>
-                    <Text style={styles.conversationTime}>{item.time}</Text>
+
                 </View>
 
-                <View style={styles.conversationBottomRow}>
-                    <Text style={styles.conversationMessage} numberOfLines={1}>
+                <View
+                    style={styles.conversationBottomRow}
+                >
+
+                    <Text
+                        style={styles.conversationMessage}
+                        numberOfLines={1}
+                    >
                         {item.lastMessage}
                     </Text>
+
                     {item.unreadCount > 0 && (
-                        <View style={styles.unreadBadge}>
-                            <Text style={styles.unreadBadgeText}>
+                        <View
+                            style={styles.unreadBadge}
+                        >
+                            <Text
+                                style={
+                                    styles.unreadBadgeText
+                                }
+                            >
                                 {item.unreadCount}
                             </Text>
                         </View>
                     )}
+
                 </View>
+
             </View>
         </TouchableOpacity>
     );
 
+    // =====================================================
+    // SCREEN
+    // =====================================================
+
     return (
         <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+
+            <StatusBar
+                barStyle="dark-content"
+                backgroundColor={COLORS.background}
+            />
 
             {/* Header */}
+
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Messages</Text>
+
+                <Text style={styles.headerTitle}>
+                    Messages
+                </Text>
+
                 <TouchableOpacity
                     style={styles.headerAction}
                     activeOpacity={0.7}
                     onPress={handleStartChat}
                 >
-                    <Ionicons name="create-outline" size={22} color={COLORS.primary} />
+                    <Ionicons
+                        name="create-outline"
+                        size={22}
+                        color={COLORS.primary}
+                    />
                 </TouchableOpacity>
+
             </View>
 
-            {/* Search Bar */}
+            {/* Search */}
+
             <View style={styles.searchContainer}>
-                <Ionicons name="search-outline" size={18} color={COLORS.placeholder} />
-                <Text style={styles.searchPlaceholder}>Search conversations</Text>
+
+                <Ionicons
+                    name="search-outline"
+                    size={18}
+                    color={COLORS.placeholder}
+                />
+
+                <Text style={styles.searchPlaceholder}>
+                    Search conversations
+                </Text>
+
             </View>
 
-            {/* Body */}
-            {hasConversations ? (
+            {/* Loading */}
+
+            {loading ? (
+
+                <View style={styles.loadingContainer}>
+
+                    <ActivityIndicator
+                        size="large"
+                        color={COLORS.primary}
+                    />
+
+                </View>
+
+            ) : conversations.length > 0 ? (
+
                 <FlatList
                     data={conversations}
                     keyExtractor={(item) => item.id}
                     renderItem={renderConversation}
-                    ItemSeparatorComponent={() => <View style={styles.separator} />}
-                    contentContainerStyle={styles.listContent}
+                    ItemSeparatorComponent={() => (
+                        <View
+                            style={styles.separator}
+                        />
+                    )}
+                    contentContainerStyle={
+                        styles.listContent
+                    }
                     showsVerticalScrollIndicator={false}
                 />
+
             ) : (
+
                 <View style={styles.emptyState}>
-                    <View style={styles.emptyIconWrapper}>
+
+                    <View
+                        style={styles.emptyIconWrapper}
+                    >
+
                         <Ionicons
                             name="chatbubbles-outline"
                             size={38}
                             color={COLORS.primary}
                         />
+
                     </View>
 
-                    <Text style={styles.emptyTitle}>No messages yet</Text>
-                    <Text style={styles.emptySubtitle}>
-                        Start a conversation with an NGO or sponsor to begin
+                    <Text style={styles.emptyTitle}>
+                        No messages yet
+                    </Text>
+
+                    <Text
+                        style={styles.emptySubtitle}
+                    >
+                        Start a conversation with an
+                        NGO or sponsor to begin
                         building partnerships.
                     </Text>
 
@@ -127,19 +333,62 @@ export default function MessagesScreen({ navigation }) {
                         activeOpacity={0.85}
                         onPress={handleStartChat}
                     >
+
                         <Ionicons
                             name="chatbubble-ellipses-outline"
                             size={18}
                             color={COLORS.white}
                             style={styles.startChatIcon}
                         />
-                        <Text style={styles.startChatText}>Start a Chat</Text>
+
+                        <Text
+                            style={styles.startChatText}
+                        >
+                            Start a Chat
+                        </Text>
+
                     </TouchableOpacity>
+
                 </View>
+
             )}
+
         </SafeAreaView>
     );
 }
+
+// =========================================================
+// TIME FORMATTER
+// =========================================================
+
+function formatTime(timestamp) {
+    if (!timestamp) {
+        return "";
+    }
+
+    const date = timestamp.toDate
+        ? timestamp.toDate()
+        : new Date(timestamp);
+
+    const now = new Date();
+
+    const sameDay =
+        date.toDateString() ===
+        now.toDateString();
+
+    if (sameDay) {
+        return date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    }
+
+    return date.toLocaleDateString([], {
+        day: "2-digit",
+        month: "short",
+    });
+}
+
 
 const styles = StyleSheet.create({
     safeArea: {
@@ -147,7 +396,6 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.background,
     },
 
-    /* Header */
     header: {
         flexDirection: "row",
         alignItems: "center",
@@ -156,11 +404,13 @@ const styles = StyleSheet.create({
         paddingTop: 12,
         paddingBottom: 16,
     },
+
     headerTitle: {
         fontSize: 26,
         fontWeight: "700",
         color: COLORS.textPrimary,
     },
+
     headerAction: {
         width: 42,
         height: 42,
@@ -170,7 +420,6 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
 
-    /* Search */
     searchContainer: {
         flexDirection: "row",
         alignItems: "center",
@@ -183,22 +432,30 @@ const styles = StyleSheet.create({
         borderColor: COLORS.border,
         borderRadius: 14,
     },
+
     searchPlaceholder: {
         marginLeft: 10,
         fontSize: 14,
         color: COLORS.placeholder,
     },
 
-    /* Conversation list */
+    loadingContainer: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
     listContent: {
         paddingHorizontal: 24,
         paddingBottom: 24,
     },
+
     conversationRow: {
         flexDirection: "row",
         alignItems: "center",
         paddingVertical: 14,
     },
+
     avatar: {
         width: 52,
         height: 52,
@@ -208,37 +465,54 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         marginRight: 14,
     },
+
     conversationContent: {
         flex: 1,
     },
+
     conversationTopRow: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
         marginBottom: 4,
     },
-    conversationName: {
+
+    nameContainer: {
         flex: 1,
+        marginRight: 8,
+    },
+
+    conversationName: {
         fontSize: 15,
         fontWeight: "700",
         color: COLORS.textPrimary,
-        marginRight: 8,
     },
+
+    roleText: {
+        fontSize: 11,
+        color: COLORS.primary,
+        marginTop: 2,
+        fontWeight: "600",
+    },
+
     conversationTime: {
         fontSize: 12,
         color: COLORS.textSecondary,
     },
+
     conversationBottomRow: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
     },
+
     conversationMessage: {
         flex: 1,
         fontSize: 14,
         color: COLORS.textSecondary,
         marginRight: 8,
     },
+
     unreadBadge: {
         minWidth: 20,
         height: 20,
@@ -248,18 +522,19 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
+
     unreadBadgeText: {
         color: COLORS.white,
         fontSize: 11,
         fontWeight: "700",
     },
+
     separator: {
         height: 1,
         backgroundColor: COLORS.border,
         marginLeft: 66,
     },
 
-    /* Empty state */
     emptyState: {
         flex: 1,
         alignItems: "center",
@@ -267,6 +542,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 40,
         paddingBottom: 60,
     },
+
     emptyIconWrapper: {
         width: 88,
         height: 88,
@@ -276,12 +552,14 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         marginBottom: 24,
     },
+
     emptyTitle: {
         fontSize: 20,
         fontWeight: "700",
         color: COLORS.textPrimary,
         marginBottom: 8,
     },
+
     emptySubtitle: {
         fontSize: 14,
         lineHeight: 21,
@@ -289,6 +567,7 @@ const styles = StyleSheet.create({
         textAlign: "center",
         marginBottom: 28,
     },
+
     startChatButton: {
         flexDirection: "row",
         alignItems: "center",
@@ -297,15 +576,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 26,
         borderRadius: 16,
         backgroundColor: COLORS.primary,
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.25,
-        shadowRadius: 10,
         elevation: 4,
     },
+
     startChatIcon: {
         marginRight: 8,
     },
+
     startChatText: {
         color: COLORS.white,
         fontSize: 15,
