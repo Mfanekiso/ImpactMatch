@@ -19,6 +19,7 @@ import { auth, db } from "../../../Backend/firebaseConfig";
 
 import projects from "../../data/projects";
 import { computeMatch } from "../../utils/matchScore";
+import { loadSponsorInterests, setSaved } from "../../utils/interests";
 
 const COLORS = {
     background: "#F9FAFB",
@@ -136,9 +137,25 @@ export default function SponsorHomeScreen({ navigation, route }) {
         }
     };
 
+    // Load which NGOs this sponsor has saved (stored in Firestore `interests`)
+    const loadSaved = async () => {
+        if (!uid) return;
+        try {
+            const map = await loadSponsorInterests(uid);
+            setSavedIds(Object.keys(map).filter((id) => map[id].saved));
+        } catch (error) {
+            console.log("Error loading saved NGOs:", error?.message);
+        }
+    };
+
     useEffect(() => {
         fetchSponsorProfile();
         fetchNgos();
+        loadSaved();
+
+        // Refresh saved hearts when coming back from Discover / details screens
+        const unsubscribe = navigation.addListener("focus", loadSaved);
+        return unsubscribe;
     }, [uid]);
 
     const organisationName =
@@ -156,10 +173,23 @@ export default function SponsorHomeScreen({ navigation, route }) {
     const topMatch = rankedNgos[0];
     const moreNgos = rankedNgos.slice(1);
 
-    const toggleSaved = (id) => {
+    const toggleSaved = async (id) => {
+        const wasSaved = savedIds.includes(id);
+
+        // Update the heart straight away, then save in the background
         setSavedIds((prev) =>
-            prev.includes(id) ? prev.filter((savedId) => savedId !== id) : [...prev, id]
+            wasSaved ? prev.filter((savedId) => savedId !== id) : [...prev, id]
         );
+
+        try {
+            await setSaved(id, !wasSaved);
+        } catch (error) {
+            // Undo if saving failed
+            setSavedIds((prev) =>
+                wasSaved ? [...prev, id] : prev.filter((savedId) => savedId !== id)
+            );
+            Alert.alert("Could not save", error?.message || "Please try again.");
+        }
     };
 
     const goToDiscover = () => navigation.navigate("Discover");

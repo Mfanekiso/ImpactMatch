@@ -15,6 +15,7 @@ import { collection, query, where, getDocs, doc, getDoc } from "firebase/firesto
 
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { computeMatch } from "../../utils/matchScore";
+import { loadSponsorInterests, getMatchStatus } from "../../utils/interests";
 
 // Cycle of avatar colours (Firestore doesn't store one)
 const AVATAR_COLORS = ["#10B981", "#2563EB", "#DB2777", "#7C3AED", "#C2410C", "#0EA5E9"];
@@ -43,6 +44,7 @@ const COLORS = {
 
 const FILTERS = [
     { label: "Recommended", value: "recommended" },
+    { label: "Saved", value: "saved" },
     { label: "Interested", value: "interested" },
     { label: "Mutual", value: "mutual" },
 ];
@@ -87,6 +89,10 @@ function MatchCard({ match, onPress }) {
                         <Text style={styles.matchPillText}>{match.matchScore}%</Text>
                     </View>
 
+                    {match.saved && (
+                        <Ionicons name="heart" size={16} color="#EF4444" />
+                    )}
+
                     <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
                         <Text style={[styles.statusPillText, { color: statusStyle.text }]}>
                             {statusStyle.label}
@@ -116,6 +122,14 @@ export default function SponsorMatchesScreen({ navigation }) {
                 if (sponsorSnap.exists()) sponsorProfile = sponsorSnap.data();
             }
 
+            // Saved / interested / mutual flags for this sponsor (never block matches if it fails)
+            let interests = {};
+            try {
+                interests = await loadSponsorInterests(uid);
+            } catch (error) {
+                console.log("Could not load interests:", error?.message);
+            }
+
             const snapshot = await getDocs(
                 query(collection(db, "users"), where("role", "==", "ngo"))
             );
@@ -137,7 +151,8 @@ export default function SponsorMatchesScreen({ navigation }) {
                         sector: data.targetCommunity || "NGO",
                         location: data.location || "Location not provided",
                         matchScore,
-                        status: "recommended", // interested / mutual need the interests feature
+                        status: getMatchStatus(interests[docSnap.id]),
+                        saved: !!interests[docSnap.id]?.saved,
                         breakdown,
                         whyYouMatch,
                     };
@@ -160,7 +175,10 @@ export default function SponsorMatchesScreen({ navigation }) {
     }, [navigation, loadMatches]);
 
     const filteredMatches = useMemo(
-        () => matches.filter((m) => m.status === activeFilter),
+        () =>
+            matches.filter((m) =>
+                activeFilter === "saved" ? m.saved : m.status === activeFilter
+            ),
         [matches, activeFilter]
     );
 

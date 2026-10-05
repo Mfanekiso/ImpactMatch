@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+    Alert,
     View,
     Text,
     ScrollView,
@@ -16,6 +17,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { computeMatch, parseAmount } from "../../utils/matchScore";
 import { startConversationWithNgo } from "../../utils/startConversation";
+import { loadSponsorInterests, setSaved, setInterested } from "../../utils/interests";
 
 const COLORS = {
     background: "#F9FAFB",
@@ -56,6 +58,8 @@ export default function SponsorOpportunityDetailsScreen({ navigation, route }) {
     const [loading, setLoading] = useState(!params.opportunity);
     const [error, setError] = useState("");
     const [starting, setStarting] = useState(false);
+    const [saved, setSavedState] = useState(false);
+    const [interested, setInterestedState] = useState(false);
 
     // Load the NGO if we were only given an id
     useEffect(() => {
@@ -93,6 +97,19 @@ export default function SponsorOpportunityDetailsScreen({ navigation, route }) {
             .catch((err) => console.log("Could not load sponsor profile:", err?.message));
     }, []);
 
+    // Load this sponsor's saved / interested flags for this NGO
+    useEffect(() => {
+        const ngoId = ngo?.id;
+        const uid = auth.currentUser?.uid;
+        if (!ngoId || !uid) return;
+        loadSponsorInterests(uid)
+            .then((map) => {
+                setSavedState(!!map[ngoId]?.saved);
+                setInterestedState(!!map[ngoId]?.interested);
+            })
+            .catch((err) => console.log("Could not load interests:", err?.message));
+    }, [ngo?.id]);
+
     const match = useMemo(
         () => (ngo && sponsor ? computeMatch(sponsor, ngo) : null),
         [ngo, sponsor]
@@ -103,6 +120,28 @@ export default function SponsorOpportunityDetailsScreen({ navigation, route }) {
         setStarting(true);
         await startConversationWithNgo(navigation, ngo);
         setStarting(false);
+    };
+
+    const handleToggleSaved = async () => {
+        const next = !saved;
+        setSavedState(next);
+        try {
+            await setSaved(ngo.id, next);
+        } catch (err) {
+            setSavedState(!next);
+            Alert.alert("Could not save", err?.message || "Please try again.");
+        }
+    };
+
+    const handleToggleInterested = async () => {
+        const next = !interested;
+        setInterestedState(next);
+        try {
+            await setInterested(ngo.id, next);
+        } catch (err) {
+            setInterestedState(!next);
+            Alert.alert("Could not update interest", err?.message || "Please try again.");
+        }
     };
 
     const Header = (
@@ -233,6 +272,40 @@ export default function SponsorOpportunityDetailsScreen({ navigation, route }) {
             </ScrollView>
 
             <View style={styles.footer}>
+                <View style={styles.actionRow}>
+                    <TouchableOpacity
+                        style={styles.saveButton}
+                        activeOpacity={0.8}
+                        onPress={handleToggleSaved}
+                    >
+                        <Ionicons
+                            name={saved ? "heart" : "heart-outline"}
+                            size={22}
+                            color={saved ? "#EF4444" : COLORS.textSecondary}
+                        />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.interestButton, interested && styles.interestButtonActive]}
+                        activeOpacity={0.85}
+                        onPress={handleToggleInterested}
+                    >
+                        <Ionicons
+                            name={interested ? "checkmark-circle" : "star-outline"}
+                            size={18}
+                            color={interested ? COLORS.white : COLORS.primary}
+                        />
+                        <Text
+                            style={[
+                                styles.interestButtonText,
+                                interested && styles.interestButtonTextActive,
+                            ]}
+                        >
+                            {interested ? "Interest Sent" : "Express Interest"}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity
                     style={[styles.primaryButton, starting && styles.primaryButtonDisabled]}
                     activeOpacity={0.85}
@@ -293,7 +366,7 @@ const styles = StyleSheet.create({
         fontWeight: "800",
         color: COLORS.textPrimary,
     },
-    scrollContent: { paddingHorizontal: 20, paddingBottom: 120 },
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 190 },
     heroCard: {
         backgroundColor: COLORS.surface,
         borderRadius: 20,
@@ -385,6 +458,32 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: COLORS.border,
     },
+    actionRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+    saveButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.surface,
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: 10,
+    },
+    interestButton: {
+        flex: 1,
+        height: 50,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 14,
+        borderWidth: 1.5,
+        borderColor: COLORS.primary,
+        backgroundColor: COLORS.surface,
+    },
+    interestButtonActive: { backgroundColor: COLORS.primary },
+    interestButtonText: { marginLeft: 6, fontSize: 15, fontWeight: "700", color: COLORS.primary },
+    interestButtonTextActive: { color: COLORS.white },
     primaryButton: {
         backgroundColor: COLORS.primary,
         borderRadius: 14,
