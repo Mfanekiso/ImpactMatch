@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import {
     View,
@@ -21,16 +20,21 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 
+// ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
 const COLORS = {
-    background: "#0F172A",
-    surface: "#1E293B",
-    surfaceFocused: "#1B2637",
-    border: "#334155",
-    primary: "#10B981",
-    accent: "#38BDF8",
-    textPrimary: "#F8FAFC",
-    textSecondary: "#94A3B8",
-    error: "#EF4444",
+    background: "#F8F6EE",       // Cream base
+    surface: "#FFFFFF",          // Clean white
+    border: "#E8DFD5",
+    primary: "#D9C982",          // Soft Luxury Gold
+    primarySoft: "rgba(217, 201, 130, 0.15)",
+    primaryGlow: "rgba(217, 201, 130, 0.25)",
+    emerald: "#059669",          // Vibrant Emerald for the primary action
+    textPrimary: "#433327",      // Warm Bronze
+    textSecondary: "#8C7A6B",    // Muted taupe
+    placeholder: "#B8A99A",
+    error: "#DC2626",            // Elegant red
+    errorSoft: "rgba(220, 38, 38, 0.1)",
+    white: "#FFFFFF",
 };
 
 export default function LoginScreen({ navigation }) {
@@ -60,61 +64,29 @@ export default function LoginScreen({ navigation }) {
         }
 
         setErrors(newErrors);
-
         return Object.keys(newErrors).length === 0;
     };
 
     const getFriendlyError = (error) => {
-        console.log("Firebase login error code:", error?.code);
-        console.log("Firebase login error message:", error?.message);
-
         switch (error?.code) {
-            case "auth/invalid-email":
-                return "Please enter a valid email address.";
-
-            case "auth/user-not-found":
-                return "No account was found with this email address.";
-
-            case "auth/wrong-password":
-                return "The password you entered is incorrect.";
-
-            case "auth/invalid-credential":
-                return "The email or password is incorrect.";
-
-            case "auth/user-disabled":
-                return "This account has been disabled.";
-
-            case "auth/too-many-requests":
-                return "Too many login attempts. Please wait a moment and try again.";
-
-            case "auth/network-request-failed":
-                return "Network error. Please check your internet connection.";
-
-            case "auth/invalid-api-key":
-                return "There is a problem with the Firebase configuration.";
-
-            default:
-                return "Something went wrong while logging in. Please try again.";
+            case "auth/invalid-email": return "Please enter a valid email address.";
+            case "auth/user-not-found": return "No account was found with this email address.";
+            case "auth/wrong-password": return "The password you entered is incorrect.";
+            case "auth/invalid-credential": return "The email or password is incorrect.";
+            case "auth/user-disabled": return "This account has been disabled.";
+            case "auth/too-many-requests": return "Too many login attempts. Please wait a moment.";
+            case "auth/network-request-failed": return "Network error. Please check your internet connection.";
+            default: return "Something went wrong while logging in. Please try again.";
         }
     };
 
     const handleLogin = async () => {
         Keyboard.dismiss();
-
         setLoginError("");
 
-        if (!validateForm()) {
-            console.log("Login validation failed:", {
-                email: email.trim(),
-                hasPassword: password.length > 0,
-            });
-            return;
-        }
+        if (!validateForm()) return;
 
         setLoading(true);
-
-        console.log("Login attempt started");
-        console.log("Email:", email.trim());
 
         try {
             const userCredentials = await signInWithEmailAndPassword(
@@ -124,59 +96,21 @@ export default function LoginScreen({ navigation }) {
             );
 
             const user = userCredentials.user;
-
-            console.log("Login successful");
-            console.log("Firebase UID:", user.uid);
-            console.log("Email:", user.email);
-
             const userSnap = await getDoc(doc(db, "users", user.uid));
-
-            const userData = userSnap.exists()
-                ? userSnap.data()
-                : null;
-
-            console.log("User Firestore data:", userData);
+            const userData = userSnap.exists() ? userSnap.data() : null;
 
             if (!userData || !userData.role) {
-                console.log("User setup incomplete: no role found");
-
-                navigation.replace("UserType", {
-                    uid: user.uid,
-                });
+                navigation.replace("UserType", { uid: user.uid });
             } else if (!userData.profileCompleted) {
-                console.log("User setup incomplete: profile not completed");
-                console.log("Role:", userData.role);
-
                 navigation.replace(
-                    userData.role === "ngo"
-                        ? "NGOSetup"
-                        : "SponsorSetup",
-                    {
-                        uid: user.uid,
-                        role: userData.role,
-                    }
+                    userData.role === "ngo" ? "NGOSetup" : "SponsorSetup",
+                    { uid: user.uid, role: userData.role }
                 );
             } else {
-                console.log("User profile complete");
-                console.log("Navigating to main application");
-
-                navigation.replace(
-                    userData.role === "ngo"
-                        ? "MainTabs"
-                        : "SponsorTabs"
-                );
+                navigation.replace(userData.role === "ngo" ? "MainTabs" : "SponsorTabs");
             }
         } catch (error) {
-            console.log("=================================");
-            console.log("LOGIN FAILED");
-            console.log("Error code:", error?.code);
-            console.log("Error message:", error?.message);
-            console.log("Full Firebase error:", error);
-            console.log("=================================");
-
-            const friendlyMessage = getFriendlyError(error);
-
-            setLoginError(friendlyMessage);
+            setLoginError(getFriendlyError(error));
         } finally {
             setLoading(false);
         }
@@ -184,10 +118,11 @@ export default function LoginScreen({ navigation }) {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <StatusBar
-                barStyle="light-content"
-                backgroundColor={COLORS.background}
-            />
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+
+            {/* ─── Decorative Background Elements ─── */}
+            <View style={styles.topRightGlow} />
+            <View style={styles.bottomLeftGlow} />
 
             <KeyboardAvoidingView
                 style={styles.flex}
@@ -202,193 +137,114 @@ export default function LoginScreen({ navigation }) {
                     >
                         <View style={styles.header}>
                             <View style={styles.brandRow}>
-                                <View style={styles.brandBadge}>
-                                    <Ionicons
-                                        name="leaf"
-                                        size={18}
-                                        color={COLORS.primary}
-                                    />
-                                </View>
-
                                 <Text style={styles.brandText}>
-                                    Impact
-                                    <Text style={styles.brandHighlight}>
-                                        Match
-                                    </Text>
+                                    IMPACT<Text style={styles.brandHighlight}>MATCH</Text>
                                 </Text>
                             </View>
 
-                            <Text style={styles.title}>
-                                Welcome back
-                            </Text>
-
-                            <Text style={styles.subtitle}>
-                                Log in to continue your impact journey.
-                            </Text>
+                            <Text style={styles.title}>Welcome back</Text>
+                            <Text style={styles.subtitle}>Log in to continue your impact journey.</Text>
                         </View>
 
                         <View style={styles.form}>
-
                             {/* EMAIL */}
                             <View style={styles.fieldWrapper}>
-                                <Text style={styles.fieldLabel}>
-                                    EMAIL ADDRESS
-                                </Text>
-
+                                <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
                                 <View
                                     style={[
                                         styles.inputContainer,
-                                        focusedField === "email" &&
-                                            styles.inputContainerFocused,
-                                        errors.email &&
-                                            styles.inputContainerError,
+                                        focusedField === "email" && styles.inputContainerFocused,
+                                        errors.email && styles.inputContainerError,
                                     ]}
                                 >
                                     <Ionicons
                                         name="mail-outline"
-                                        size={19}
+                                        size={20}
                                         color={
                                             errors.email
                                                 ? COLORS.error
                                                 : focusedField === "email"
                                                 ? COLORS.primary
-                                                : COLORS.textSecondary
+                                                : COLORS.placeholder
                                         }
                                     />
-
                                     <TextInput
                                         style={styles.input}
                                         placeholder="you@example.com"
-                                        placeholderTextColor={
-                                            COLORS.textSecondary
-                                        }
+                                        placeholderTextColor={COLORS.placeholder}
                                         value={email}
                                         onChangeText={(text) => {
                                             setEmail(text);
-
-                                            if (errors.email) {
-                                                setErrors((prev) => ({
-                                                    ...prev,
-                                                    email: "",
-                                                }));
-                                            }
-
+                                            if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
                                             setLoginError("");
                                         }}
                                         keyboardType="email-address"
                                         autoCapitalize="none"
                                         autoCorrect={false}
                                         editable={!loading}
-                                        onFocus={() =>
-                                            setFocusedField("email")
-                                        }
-                                        onBlur={() =>
-                                            setFocusedField(null)
-                                        }
+                                        onFocus={() => setFocusedField("email")}
+                                        onBlur={() => setFocusedField(null)}
                                     />
                                 </View>
-
-                                {errors.email ? (
-                                    <Text style={styles.errorText}>
-                                        {errors.email}
-                                    </Text>
-                                ) : null}
+                                {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
                             </View>
 
                             {/* PASSWORD */}
                             <View style={styles.fieldWrapper}>
-                                <Text style={styles.fieldLabel}>
-                                    PASSWORD
-                                </Text>
-
+                                <Text style={styles.fieldLabel}>PASSWORD</Text>
                                 <View
                                     style={[
                                         styles.inputContainer,
-                                        focusedField === "password" &&
-                                            styles.inputContainerFocused,
-                                        errors.password &&
-                                            styles.inputContainerError,
+                                        focusedField === "password" && styles.inputContainerFocused,
+                                        errors.password && styles.inputContainerError,
                                     ]}
                                 >
                                     <Ionicons
                                         name="lock-closed-outline"
-                                        size={19}
+                                        size={20}
                                         color={
                                             errors.password
                                                 ? COLORS.error
                                                 : focusedField === "password"
                                                 ? COLORS.primary
-                                                : COLORS.textSecondary
+                                                : COLORS.placeholder
                                         }
                                     />
-
                                     <TextInput
                                         style={styles.input}
                                         placeholder="Enter your password"
-                                        placeholderTextColor={
-                                            COLORS.textSecondary
-                                        }
+                                        placeholderTextColor={COLORS.placeholder}
                                         value={password}
                                         onChangeText={(text) => {
                                             setPassword(text);
-
-                                            if (errors.password) {
-                                                setErrors((prev) => ({
-                                                    ...prev,
-                                                    password: "",
-                                                }));
-                                            }
-
+                                            if (errors.password) setErrors((prev) => ({ ...prev, password: "" }));
                                             setLoginError("");
                                         }}
                                         secureTextEntry={!showPassword}
                                         editable={!loading}
-                                        onFocus={() =>
-                                            setFocusedField("password")
-                                        }
-                                        onBlur={() =>
-                                            setFocusedField(null)
-                                        }
+                                        onFocus={() => setFocusedField("password")}
+                                        onBlur={() => setFocusedField(null)}
                                     />
-
                                     <TouchableOpacity
                                         style={styles.eyeButton}
-                                        onPress={() =>
-                                            setShowPassword(!showPassword)
-                                        }
+                                        onPress={() => setShowPassword(!showPassword)}
                                         disabled={loading}
                                     >
                                         <Ionicons
-                                            name={
-                                                showPassword
-                                                    ? "eye-off-outline"
-                                                    : "eye-outline"
-                                            }
-                                            size={19}
+                                            name={showPassword ? "eye-off-outline" : "eye-outline"}
+                                            size={20}
                                             color={COLORS.textSecondary}
                                         />
                                     </TouchableOpacity>
                                 </View>
-
-                                {errors.password ? (
-                                    <Text style={styles.errorText}>
-                                        {errors.password}
-                                    </Text>
-                                ) : null}
+                                {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
                             </View>
 
                             {/* FIREBASE ERROR */}
                             {loginError ? (
                                 <View style={styles.loginErrorBox}>
-                                    <Ionicons
-                                        name="alert-circle-outline"
-                                        size={20}
-                                        color={COLORS.error}
-                                    />
-
-                                    <Text style={styles.loginErrorText}>
-                                        {loginError}
-                                    </Text>
+                                    <Ionicons name="alert-circle" size={20} color={COLORS.error} />
+                                    <Text style={styles.loginErrorText}>{loginError}</Text>
                                 </View>
                             ) : null}
 
@@ -396,44 +252,24 @@ export default function LoginScreen({ navigation }) {
                             <TouchableOpacity
                                 style={styles.forgotBtn}
                                 activeOpacity={0.7}
-                                onPress={() =>
-                                    navigation.navigate("ForgotPassword")
-                                }
+                                onPress={() => navigation.navigate("ForgotPassword")}
                             >
-                                <Text style={styles.forgotText}>
-                                    Forgot password?
-                                </Text>
+                                <Text style={styles.forgotText}>Forgot password?</Text>
                             </TouchableOpacity>
 
                             {/* LOGIN BUTTON */}
                             <TouchableOpacity
-                                style={[
-                                    styles.loginButton,
-                                    loading &&
-                                        styles.loginButtonDisabled,
-                                ]}
+                                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
                                 activeOpacity={0.85}
                                 onPress={handleLogin}
                                 disabled={loading}
                             >
                                 {loading ? (
-                                    <ActivityIndicator color="#FFFFFF" />
+                                    <ActivityIndicator color={COLORS.white} />
                                 ) : (
                                     <>
-                                        <Text
-                                            style={
-                                                styles.loginButtonText
-                                            }
-                                        >
-                                            Log In
-                                        </Text>
-
-                                        <Ionicons
-                                            name="arrow-forward"
-                                            size={18}
-                                            color="#FFFFFF"
-                                            style={styles.loginButtonIcon}
-                                        />
+                                        <Text style={styles.loginButtonText}>Log In</Text>
+                                        <Ionicons name="arrow-forward" size={18} color={COLORS.white} style={styles.loginButtonIcon} />
                                     </>
                                 )}
                             </TouchableOpacity>
@@ -443,15 +279,10 @@ export default function LoginScreen({ navigation }) {
                         <TouchableOpacity
                             style={styles.footer}
                             activeOpacity={0.7}
-                            onPress={() =>
-                                navigation.navigate("SignUp")
-                            }
+                            onPress={() => navigation.navigate("SignUp")}
                         >
                             <Text style={styles.footerPrompt}>
-                                Don't have an account?{" "}
-                                <Text style={styles.footerLink}>
-                                    Sign Up
-                                </Text>
+                                Don't have an account? <Text style={styles.footerLink}>Sign Up</Text>
                             </Text>
                         </TouchableOpacity>
                     </ScrollView>
@@ -466,103 +297,116 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.background,
     },
-
     flex: {
         flex: 1,
-        backgroundColor: COLORS.background,
+    },
+    /* Decorative Abstract Glows */
+    topRightGlow: {
+        position: 'absolute',
+        top: -100,
+        right: -80,
+        width: 300,
+        height: 300,
+        borderRadius: 150,
+        backgroundColor: COLORS.primaryGlow,
+        opacity: 0.6,
+    },
+    bottomLeftGlow: {
+        position: 'absolute',
+        bottom: -50,
+        left: -100,
+        width: 250,
+        height: 250,
+        borderRadius: 125,
+        backgroundColor: 'rgba(5, 150, 105, 0.05)', // extremely soft emerald glow
     },
 
     scrollContent: {
         flexGrow: 1,
-        paddingHorizontal: 28,
-        paddingTop: 24,
-        paddingBottom: 32,
+        paddingHorizontal: 32,
+        paddingTop: 40,
+        paddingBottom: 40,
     },
 
     header: {
-        marginBottom: 40,
+        marginBottom: 48,
     },
-
     brandRow: {
         flexDirection: "row",
         alignItems: "center",
-        marginBottom: 40,
+        marginBottom: 48,
     },
-
     brandBadge: {
-        width: 40,
-        height: 40,
-        borderRadius: 14,
-        backgroundColor: "rgba(16, 185, 129, 0.12)",
+        width: 44,
+        height: 44,
+        borderRadius: 16,
+        backgroundColor: "rgba(5, 150, 105, 0.1)", // emerald tint
         borderWidth: 1,
-        borderColor: "rgba(16, 185, 129, 0.30)",
+        borderColor: "rgba(5, 150, 105, 0.2)",
         alignItems: "center",
         justifyContent: "center",
-        marginRight: 12,
+        marginRight: 14,
     },
-
     brandText: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: "800",
         color: COLORS.textPrimary,
-        letterSpacing: 0.5,
-        textTransform: "uppercase",
+        letterSpacing: 2,
     },
-
     brandHighlight: {
-        color: COLORS.primary,
+        color: COLORS.primary, // Gold highlight for the MATCH text
     },
-
     title: {
-        fontSize: 30,
+        fontSize: 34,
         fontWeight: "700",
         color: COLORS.textPrimary,
-        lineHeight: 38,
-        marginBottom: 10,
+        lineHeight: 42,
+        marginBottom: 12,
+        letterSpacing: -0.5,
     },
-
     subtitle: {
         fontSize: 15,
         color: COLORS.textSecondary,
-        lineHeight: 22,
+        lineHeight: 24,
     },
 
     form: {
         flex: 1,
     },
-
     fieldWrapper: {
-        marginBottom: 18,
+        marginBottom: 24,
     },
-
     fieldLabel: {
         fontSize: 11,
         fontWeight: "700",
-        letterSpacing: 1,
+        letterSpacing: 1.5,
         color: COLORS.textSecondary,
-        marginBottom: 8,
+        marginBottom: 10,
     },
-
     inputContainer: {
         flexDirection: "row",
         alignItems: "center",
-        height: 56,
-        paddingHorizontal: 16,
+        height: 60,
+        paddingHorizontal: 18,
         backgroundColor: COLORS.surface,
-        borderWidth: 1.5,
+        borderWidth: 1,
         borderColor: COLORS.border,
-        borderRadius: 16,
+        borderRadius: 20,
+        shadowColor: COLORS.textPrimary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.02,
+        shadowRadius: 8,
+        elevation: 1,
     },
-
     inputContainerFocused: {
         borderColor: COLORS.primary,
-        backgroundColor: COLORS.surfaceFocused,
+        shadowOpacity: 0.08,
+        shadowColor: COLORS.primary,
+        elevation: 4,
     },
-
     inputContainerError: {
         borderColor: COLORS.error,
     },
-
     input: {
         flex: 1,
         marginLeft: 12,
@@ -570,87 +414,83 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: COLORS.textPrimary,
     },
-
     eyeButton: {
-        marginLeft: 8,
-        padding: 2,
+        padding: 4,
     },
-
     errorText: {
         color: COLORS.error,
         fontSize: 12,
-        marginTop: 6,
+        marginTop: 8,
         marginLeft: 4,
+        fontWeight: "500",
     },
 
     loginErrorBox: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "rgba(239, 68, 68, 0.10)",
+        backgroundColor: COLORS.errorSoft,
         borderWidth: 1,
-        borderColor: "rgba(239, 68, 68, 0.30)",
-        borderRadius: 12,
-        padding: 12,
-        marginBottom: 18,
+        borderColor: "rgba(220, 38, 38, 0.2)",
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 24,
     },
-
     loginErrorText: {
         flex: 1,
-        color: "#FCA5A5",
+        color: COLORS.error,
         fontSize: 13,
         lineHeight: 19,
-        marginLeft: 9,
+        marginLeft: 12,
+        fontWeight: "500",
     },
 
     forgotBtn: {
         alignSelf: "flex-end",
-        marginBottom: 28,
+        marginBottom: 32,
     },
-
     forgotText: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: COLORS.primary,
+        fontSize: 14,
+        fontWeight: "700",
+        color: COLORS.emerald, // Emerald pops nicely here
     },
 
     loginButton: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        height: 56,
-        borderRadius: 16,
-        backgroundColor: COLORS.primary,
-        boxShadow: "0px 8px 12px rgba(16, 185, 129, 0.35)",
-        elevation: 6,
+        height: 60,
+        borderRadius: 30, // Luxury pill shape
+        backgroundColor: COLORS.emerald,
+        shadowColor: COLORS.emerald,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 8,
     },
-
     loginButtonDisabled: {
-        opacity: 0.7,
+        opacity: 0.6,
+        shadowOpacity: 0,
     },
-
     loginButtonText: {
-        color: "#FFFFFF",
+        color: COLORS.white,
         fontSize: 16,
         fontWeight: "700",
         letterSpacing: 0.5,
     },
-
     loginButtonIcon: {
         marginLeft: 8,
     },
 
     footer: {
-        marginTop: 32,
+        marginTop: 40,
         alignItems: "center",
     },
-
     footerPrompt: {
         fontSize: 15,
         color: COLORS.textSecondary,
     },
-
     footerLink: {
-        color: COLORS.accent,
-        fontWeight: "600",
+        color: COLORS.emerald,
+        fontWeight: "700",
     },
 });
