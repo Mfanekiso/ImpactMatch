@@ -10,6 +10,13 @@ import {
     StatusBar,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
 // ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
 const COLORS = {
@@ -35,6 +42,13 @@ const softShadow = {
 };
 
 export default function SponsorDetailsScreen({ route, navigation }) {
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
     const { sponsor } = route.params || {};
 
     const handleShortlist = () => {
@@ -51,8 +65,8 @@ export default function SponsorDetailsScreen({ route, navigation }) {
         );
     };
 
-    // Safely fallback if data is missing
-    if (!sponsor) return null;
+    // Safely fallback if data is missing or fonts aren't loaded
+    if (!sponsor || !fontsLoaded) return null;
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -195,8 +209,8 @@ const styles = StyleSheet.create({
         borderColor: COLORS.border,
     },
     headerTitle: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 18,
-        fontWeight: "700",
         color: COLORS.textPrimary,
         letterSpacing: 0.5,
     },
@@ -237,15 +251,15 @@ const styles = StyleSheet.create({
         borderRadius: 12,
     },
     typeText: {
+        fontFamily: "Manrope_700Bold",
         color: COLORS.emerald,
         fontSize: 12,
-        fontWeight: "700",
         textTransform: "uppercase",
         letterSpacing: 0.5,
     },
     name: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 32,
-        fontWeight: "700",
         color: COLORS.textPrimary,
         letterSpacing: -0.5,
         lineHeight: 38,
@@ -275,20 +289,21 @@ const styles = StyleSheet.create({
         marginRight: 16,
     },
     matchScore: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 18,
-        fontWeight: "800",
         color: COLORS.textPrimary,
     },
     matchInfo: {
         flex: 1,
     },
     matchTitle: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 16,
-        fontWeight: "700",
         color: COLORS.textPrimary,
         marginBottom: 4,
     },
     matchSubtitle: {
+        fontFamily: "Manrope_400Regular",
         fontSize: 13,
         color: COLORS.textSecondary,
         lineHeight: 18,
@@ -305,12 +320,13 @@ const styles = StyleSheet.create({
         ...softShadow,
     },
     cardTitle: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 18,
-        fontWeight: "700",
         color: COLORS.textPrimary,
         marginBottom: 16,
     },
     description: {
+        fontFamily: "Manrope_400Regular",
         fontSize: 15,
         lineHeight: 24,
         color: COLORS.textSecondary,
@@ -331,13 +347,14 @@ const styles = StyleSheet.create({
         marginRight: 16,
     },
     detailLabel: {
+        fontFamily: "Manrope_500Medium",
         fontSize: 12,
         color: COLORS.textSecondary,
         marginBottom: 2,
     },
     detailText: {
+        fontFamily: "Manrope_600SemiBold",
         fontSize: 15,
-        fontWeight: "500",
         color: COLORS.textPrimary,
     },
     divider: {
@@ -360,9 +377,9 @@ const styles = StyleSheet.create({
         borderRadius: 20,
     },
     causeText: {
+        fontFamily: "Manrope_700Bold",
         color: COLORS.emerald,
         fontSize: 13,
-        fontWeight: "700",
         letterSpacing: 0.3,
     },
 
@@ -385,9 +402,9 @@ const styles = StyleSheet.create({
         elevation: 6,
     },
     interestButtonText: {
+        fontFamily: "Manrope_700Bold",
         color: COLORS.white,
         fontSize: 16,
-        fontWeight: "700",
         marginRight: 8,
         letterSpacing: 0.5,
     },
@@ -405,8 +422,8 @@ const styles = StyleSheet.create({
         marginRight: 8,
     },
     shortlistButtonText: {
+        fontFamily: "Manrope_600SemiBold",
         color: COLORS.textPrimary,
         fontSize: 16,
-        fontWeight: "600",
     },
 });

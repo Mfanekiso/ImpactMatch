@@ -14,6 +14,13 @@ import {
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as ImagePicker from "expo-image-picker";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
 // Firebase imports
 import { doc, getDoc, updateDoc } from "firebase/firestore";
@@ -46,6 +53,13 @@ const softShadow = {
 };
 
 export default function NGOProfileScreen({ navigation }) {
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
@@ -130,6 +144,10 @@ export default function NGOProfileScreen({ navigation }) {
         }
     };
 
+    if (!fontsLoaded) {
+        return null;
+    }
+
     if (loading) {
         return (
             <SafeAreaView style={[styles.safeArea, styles.centered]}>
@@ -160,11 +178,6 @@ export default function NGOProfileScreen({ navigation }) {
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-
-            {/* Header Title */}
-            {/* <View style={styles.topHeader}>
-                <Text style={styles.headerTitle}>Profile</Text>
-            </View> */}
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 
@@ -255,19 +268,8 @@ const styles = StyleSheet.create({
         justifyContent: "center", 
         alignItems: "center" 
     },
-    topHeader: {
-        paddingHorizontal: 24,
-        paddingTop: 12,
-        paddingBottom: 16,
-    },
-    headerTitle: {
-        fontSize: 32,
-        fontWeight: "700",
-        color: COLORS.textPrimary,
-        letterSpacing: -0.5,
-    },
     scrollContent: { 
-        paddingBottom: 120 // Extra padding for the luxurious floating bottom bar
+        paddingBottom: 120 
     },
     imageContainer: {
         position: 'relative',
@@ -282,7 +284,7 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(67, 51, 39, 0.1)', // Slight warm tint to cover image
+        backgroundColor: 'rgba(67, 51, 39, 0.1)', 
     },
     profileHeader: { 
         flexDirection: "row", 
@@ -315,9 +317,9 @@ const styles = StyleSheet.create({
         justifyContent: "center" 
     },
     avatarText: { 
+        fontFamily: "Manrope_700Bold",
         color: COLORS.textPrimary, 
         fontSize: 24, 
-        fontWeight: "800" 
     },
     cameraBadge: { 
         position: "absolute", 
@@ -343,8 +345,8 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     editButtonText: { 
+        fontFamily: "Manrope_700Bold",
         fontSize: 13, 
-        fontWeight: "700", 
         color: COLORS.textPrimary,
         letterSpacing: 0.3,
     },
@@ -361,8 +363,8 @@ const styles = StyleSheet.create({
         marginBottom: 6 
     },
     organisationName: { 
+        fontFamily: "Manrope_700Bold",
         fontSize: 26, 
-        fontWeight: "700", 
         color: COLORS.textPrimary,
         letterSpacing: -0.5,
     },
@@ -376,16 +378,16 @@ const styles = StyleSheet.create({
         gap: 4 
     },
     verifiedText: { 
+        fontFamily: "Manrope_700Bold",
         fontSize: 12, 
-        fontWeight: "700", 
         color: COLORS.emerald,
         textTransform: "uppercase",
         letterSpacing: 0.5,
     },
     locationText: { 
+        fontFamily: "Manrope_500Medium",
         fontSize: 15, 
         color: COLORS.textSecondary,
-        fontWeight: "500",
     },
     menuContainer: { 
         backgroundColor: COLORS.surface, 
@@ -420,12 +422,13 @@ const styles = StyleSheet.create({
         flex: 1 
     },
     menuTitle: { 
+        fontFamily: "Manrope_700Bold",
         fontSize: 15, 
-        fontWeight: "700", 
         color: COLORS.textPrimary, 
         marginBottom: 4 
     },
     menuSubtitle: { 
+        fontFamily: "Manrope_400Regular",
         fontSize: 14, 
         color: COLORS.textSecondary,
         lineHeight: 20,
@@ -444,8 +447,8 @@ const styles = StyleSheet.create({
         marginRight: 8,
     },
     signOutText: { 
+        fontFamily: "Manrope_700Bold",
         fontSize: 16, 
-        fontWeight: "700", 
         color: COLORS.danger,
         letterSpacing: 0.3,
     },

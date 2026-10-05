@@ -9,6 +9,13 @@ import {
     StatusBar,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
 import sponsors from "../../data/sponsors";
 
@@ -17,10 +24,12 @@ const COLORS = {
     surface: "#FFFFFF",
     primary: "#D9C982", // Soft Luxury Gold
     emerald: "#059669", 
+    coral: "#DC2626", // Added coral color for the notification dot
     textPrimary: "#433327", 
     textSecondary: "#8C7A6B", 
     border: "#E8DFD5",
     white: "#FFFFFF",
+    ivory: "#433327", 
     
     // Luxury Gold Card specific colors
     goldCardBg: "#D9C982",
@@ -40,9 +49,19 @@ const softShadow = (opacity, radius, elevation) => ({
 });
 
 export default function NGOHomeScreen({ navigation, route }) {
-    // Added 'user' here to prevent ReferenceError from the new hero block
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
     const { organisationName, user } = route.params || {};
     const recommendedSponsors = sponsors ? sponsors.slice(0, 3) : [];
+
+    if (!fontsLoaded) {
+        return null;
+    }
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -62,10 +81,6 @@ export default function NGOHomeScreen({ navigation, route }) {
                         {/* <Ionicons name="leaf" size={20} color={COLORS.primary} style={styles.logoIcon} /> */}
                         <Text style={styles.headerTitle}>IMPACTMATCH</Text>
                     </View>
-{/* 
-                    <TouchableOpacity style={styles.headerIcon}>
-                        <Ionicons name="notifications-outline" size={24} color={COLORS.textPrimary} />
-                    </TouchableOpacity> */}
 
                     <TouchableOpacity style={styles.bellButton} activeOpacity={0.7}>
                         <Ionicons
@@ -234,10 +249,11 @@ const styles = StyleSheet.create({
         marginRight: 6,
     },
     headerTitle: {
-        fontSize: 16,
-        fontWeight: "800",
+        fontFamily: "Manrope_700Bold",
+        fontSize: 20,
         letterSpacing: 1.2,
         color: COLORS.primary,
+
     },
 
     /* ─── Hero Greeting ─── */
@@ -246,22 +262,22 @@ const styles = StyleSheet.create({
         paddingHorizontal: 4,
     },
     heroEyebrow: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 21,
-        fontWeight: "700",
         color: COLORS.primary,
         letterSpacing: 2,
         marginBottom: 2,
     },
     heroTitle: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 28,
-        fontWeight: "400",
         color: COLORS.textPrimary,
         marginBottom: 6,
         letterSpacing: 0.5,
     },
     heroSubtitle: {
+        fontFamily: "Manrope_400Regular",
         fontSize: 14,
-        fontWeight: "400",
         color: COLORS.textSecondary,
         letterSpacing: 0.2,
     },
@@ -291,8 +307,8 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     impactLabel: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 10,
-        fontWeight: "700",
         letterSpacing: 2,
         color: COLORS.goldCardTextMuted,
     },
@@ -305,9 +321,9 @@ const styles = StyleSheet.create({
         borderRadius: 20,
     },
     impactPillText: {
+        fontFamily: "Manrope_600SemiBold",
         color: COLORS.goldCardText,
         fontSize: 10,
-        fontWeight: "600",
         marginLeft: 4,
         letterSpacing: 0.4,
     },
@@ -317,13 +333,14 @@ const styles = StyleSheet.create({
         marginBottom: 22,
     },
     featuredValue: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 40,
-        fontWeight: "300",
         color: COLORS.goldCardText,
         letterSpacing: 0.5,
         marginBottom: 4,
     },
     featuredLabel: {
+        fontFamily: "Manrope_400Regular",
         fontSize: 12,
         color: COLORS.goldCardTextMuted,
         letterSpacing: 0.3,
@@ -352,15 +369,15 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     secondaryValue: {
+        fontFamily: "Manrope_600SemiBold",
         fontSize: 20,
-        fontWeight: "500",
         color: COLORS.goldCardText,
         marginBottom: 6,
         letterSpacing: 0.3,
     },
     secondaryLabel: {
+        fontFamily: "Manrope_600SemiBold",
         fontSize: 9,
-        fontWeight: "600",
         color: COLORS.goldCardTextMuted,
         textAlign: "center",
         lineHeight: 13,
@@ -375,13 +392,13 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     sectionTitle: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 18,
-        fontWeight: "600",
         color: COLORS.textPrimary,
     },
     seeAll: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 14,
-        fontWeight: "600",
         color: COLORS.primary,
     },
 
@@ -413,13 +430,13 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(5, 150, 105, 0.05)",
     },
     matchText: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 14,
-        fontWeight: "800",
         color: COLORS.textPrimary,
     },
     matchLabel: {
+        fontFamily: "Manrope_600SemiBold",
         fontSize: 9,
-        fontWeight: "600",
         color: COLORS.textSecondary,
         textTransform: "uppercase",
     },
@@ -428,17 +445,19 @@ const styles = StyleSheet.create({
         marginRight: 10,
     },
     sponsorName: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 16,
-        fontWeight: "600",
         color: COLORS.textPrimary,
         marginBottom: 4,
     },
     sponsorTags: {
+        fontFamily: "Manrope_500Medium",
         fontSize: 12,
         color: COLORS.textSecondary,
         marginBottom: 2,
     },
     sponsorLocation: {
+        fontFamily: "Manrope_500Medium",
         fontSize: 12,
         color: COLORS.textSecondary,
     },
@@ -453,6 +472,7 @@ const styles = StyleSheet.create({
 
     /* Empty State */
     emptyText: {
+        fontFamily: "Manrope_500Medium",
         fontSize: 14,
         color: COLORS.textSecondary,
         textAlign: "center",
@@ -475,13 +495,13 @@ const styles = StyleSheet.create({
         elevation: 4,
     },
     exploreButtonText: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 15,
-        fontWeight: "600",
         color: COLORS.white,
         marginRight: 8,
         letterSpacing: 0.5,
     },
-        bellButton: {
+    bellButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
@@ -502,5 +522,4 @@ const styles = StyleSheet.create({
         borderWidth: 1.5,
         borderColor: COLORS.surface,
     },
-    
 });

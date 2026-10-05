@@ -20,10 +20,9 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 
-// ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
 const COLORS = {
-    background: "#F8F6EE",       // Cream base
-    surface: "#FFFFFF",          // Clean white
+    background: "#F8F6EE",
+    surface: "#FFFFFF",
     border: "#E8DFD5",
     primary: "#D9C982",          // Soft Luxury Gold
     primarySoft: "rgba(217, 201, 130, 0.15)",
@@ -460,7 +459,7 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         height: 60,
         borderRadius: 30, // Luxury pill shape
-        backgroundColor: COLORS.emerald,
+        backgroundColor: '#013e37',
         shadowColor: COLORS.emerald,
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
