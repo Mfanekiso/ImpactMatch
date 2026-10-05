@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
     View,
     Text,
@@ -9,6 +9,10 @@ import {
     StatusBar,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import { doc, getDoc } from "firebase/firestore";
+
+import { auth, db } from "../../../Backend/firebaseConfig";
+import { startConversationWithNgo } from "../../utils/startConversation";
 
 const COLORS = {
     background: "#F9FAFB",
@@ -33,14 +37,34 @@ const BREAKDOWN_LABELS = [
     { key: "csrEsgAlignment", label: "CSR / ESG Alignment" },
 ];
 
-const SPONSOR = {
-    name: "GreenFuture Foundation",
-    shortName: "GF",
-    color: COLORS.primary,
-};
+const SPONSOR_COLOR = COLORS.primary;
+
+function getInitials(name) {
+    if (!name) return "?";
+    return name
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+}
 
 export default function SponsorMatchDetailsScreen({ navigation, route }) {
     const { match } = route.params || {};
+    const [sponsorName, setSponsorName] = useState("You");
+
+    // Show the signed-in sponsor's real organisation name
+    useEffect(() => {
+        const uid = auth.currentUser?.uid;
+        if (!uid) return;
+        getDoc(doc(db, "users", uid))
+            .then((snap) => {
+                if (snap.exists() && snap.data().organisationName) {
+                    setSponsorName(snap.data().organisationName);
+                }
+            })
+            .catch((error) => console.log("Could not load sponsor name:", error?.message));
+    }, []);
 
     if (!match) {
         return (
@@ -72,11 +96,11 @@ export default function SponsorMatchDetailsScreen({ navigation, route }) {
             >
                 <View style={styles.comparisonCard}>
                     <View style={styles.comparisonSide}>
-                        <View style={[styles.compareAvatar, { backgroundColor: SPONSOR.color }]}>
-                            <Text style={styles.compareAvatarText}>{SPONSOR.shortName}</Text>
+                        <View style={[styles.compareAvatar, { backgroundColor: SPONSOR_COLOR }]}>
+                            <Text style={styles.compareAvatarText}>{getInitials(sponsorName)}</Text>
                         </View>
                         <Text style={styles.compareName} numberOfLines={2}>
-                            {SPONSOR.name}
+                            {sponsorName}
                         </Text>
                         <Text style={styles.compareLabel}>Sponsor</Text>
                     </View>
@@ -101,7 +125,7 @@ export default function SponsorMatchDetailsScreen({ navigation, route }) {
 
                 <Text style={styles.sectionTitle}>Match Breakdown</Text>
                 <View style={styles.breakdownCard}>
-                    {BREAKDOWN_LABELS.map(({ key, label }) => {
+                    {BREAKDOWN_LABELS.filter(({ key }) => match.breakdown?.[key] != null).map(({ key, label }) => {
                         const value = match.breakdown?.[key] ?? 0;
                         return (
                             <View key={key} style={styles.breakdownRow}>
@@ -165,9 +189,12 @@ export default function SponsorMatchDetailsScreen({ navigation, route }) {
                 <TouchableOpacity
                     style={styles.primaryButton}
                     activeOpacity={0.85}
-                    onPress={() => {
-                        // TODO: navigate into the Messages tab with this org pre-selected
-                    }}
+                    onPress={() =>
+                        startConversationWithNgo(navigation, {
+                            id: match.id,
+                            name: match.name,
+                        })
+                    }
                 >
                     <Text style={styles.primaryButtonText}>Start Conversation</Text>
                 </TouchableOpacity>
@@ -175,9 +202,11 @@ export default function SponsorMatchDetailsScreen({ navigation, route }) {
                 <TouchableOpacity
                     style={styles.secondaryButton}
                     activeOpacity={0.85}
-                    onPress={() => {
-                        // TODO: navigate to the full org profile (SponsorOpportunityDetails)
-                    }}
+                    onPress={() =>
+                        navigation.navigate("SponsorOpportunityDetails", {
+                            ngoId: match.id,
+                        })
+                    }
                 >
                     <Text style={styles.secondaryButtonText}>View Organisation</Text>
                 </TouchableOpacity>

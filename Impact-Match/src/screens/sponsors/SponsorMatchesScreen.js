@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -7,10 +7,27 @@ import {
     StyleSheet,
     SafeAreaView,
     StatusBar,
+    ActivityIndicator,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 
-import matches from "../../data/matches";
+import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+
+import { auth, db } from "../../../Backend/firebaseConfig";
+import { computeMatch } from "../../utils/matchScore";
+
+// Cycle of avatar colours (Firestore doesn't store one)
+const AVATAR_COLORS = ["#10B981", "#2563EB", "#DB2777", "#7C3AED", "#C2410C", "#0EA5E9"];
+
+function getInitials(name) {
+    if (!name) return "?";
+    return name
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+}
 
 const COLORS = {
     background: "#F9FAFB",
@@ -85,10 +102,66 @@ function MatchCard({ match, onPress }) {
 
 export default function SponsorMatchesScreen({ navigation }) {
     const [activeFilter, setActiveFilter] = useState("recommended");
+    const [matches, setMatches] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Load real NGOs + the sponsor's profile, then score each NGO
+    const loadMatches = useCallback(async () => {
+        try {
+            const uid = auth.currentUser?.uid;
+
+            let sponsorProfile = {};
+            if (uid) {
+                const sponsorSnap = await getDoc(doc(db, "users", uid));
+                if (sponsorSnap.exists()) sponsorProfile = sponsorSnap.data();
+            }
+
+            const snapshot = await getDocs(
+                query(collection(db, "users"), where("role", "==", "ngo"))
+            );
+
+            const results = snapshot.docs
+                .map((docSnap, index) => {
+                    const data = docSnap.data();
+                    const { matchScore, breakdown, whyYouMatch } = computeMatch(
+                        sponsorProfile,
+                        data
+                    );
+
+                    return {
+                        id: docSnap.id, // real NGO uid, needed for chat + details
+                        name: data.organisationName || "Unnamed NGO",
+                        shortName: getInitials(data.organisationName),
+                        color: AVATAR_COLORS[index % AVATAR_COLORS.length],
+                        verified: !!data.profileCompleted,
+                        sector: data.targetCommunity || "NGO",
+                        location: data.location || "Location not provided",
+                        matchScore,
+                        status: "recommended", // interested / mutual need the interests feature
+                        breakdown,
+                        whyYouMatch,
+                    };
+                })
+                .sort((a, b) => b.matchScore - a.matchScore);
+
+            setMatches(results);
+        } catch (error) {
+            console.log("Error loading matches:", error?.message);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadMatches();
+        // Refresh scores whenever the tab is opened (profile may have changed)
+        const unsubscribe = navigation.addListener("focus", loadMatches);
+        return unsubscribe;
+    }, [navigation, loadMatches]);
 
     const filteredMatches = useMemo(
         () => matches.filter((m) => m.status === activeFilter),
-        [activeFilter]
+        [matches, activeFilter]
     );
 
     const goToMatchDetails = (match) => {
@@ -134,7 +207,13 @@ export default function SponsorMatchesScreen({ navigation }) {
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
             >
-                {filteredMatches.length > 0 ? (
+                {loading ? (
+                    <ActivityIndicator
+                        size="large"
+                        color={COLORS.primary}
+                        style={{ marginTop: 40 }}
+                    />
+                ) : filteredMatches.length > 0 ? (
                     filteredMatches.map((match) => (
                         <MatchCard
                             key={match.id}

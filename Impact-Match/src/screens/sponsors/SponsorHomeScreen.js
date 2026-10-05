@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
     View,
     Text,
@@ -18,6 +18,7 @@ import { collection, query, where, getDocs } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 
 import projects from "../../data/projects";
+import { computeMatch } from "../../utils/matchScore";
 
 const COLORS = {
     background: "#F9FAFB",
@@ -143,8 +144,17 @@ export default function SponsorHomeScreen({ navigation, route }) {
     const organisationName =
         sponsorProfile?.organisationName || route?.params?.organisationName || "Sponsor";
 
-    const topMatch = ngos[0];
-    const moreNgos = ngos.slice(1);
+    // Rank NGOs by how well they match this sponsor's profile (best first)
+    const rankedNgos = useMemo(() => {
+        if (!sponsorProfile) return ngos;
+        return ngos
+            .map((ngo) => ({ ngo, score: computeMatch(sponsorProfile, ngo).matchScore }))
+            .sort((a, b) => b.score - a.score)
+            .map((item) => item.ngo);
+    }, [ngos, sponsorProfile]);
+
+    const topMatch = rankedNgos[0];
+    const moreNgos = rankedNgos.slice(1);
 
     const toggleSaved = (id) => {
         setSavedIds((prev) =>

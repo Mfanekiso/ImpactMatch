@@ -24,6 +24,7 @@ import SponsorSetupScreen from "../screens/sponsors/SponsorSetupScreen";
 import SponsorMatchDetailsScreen from "../screens/sponsors/SponsorMatchDetailsScreen";
 import NewChat from "../screens/sponsors/NewChat";
 import ChatScreen from "../screens/sponsors/ChatScreen";
+import SponsorOpportunityDetailsScreen from "../screens/sponsors/SponsorOpportunityDetailsScreen";
 
 // Initialize Navigators
 const Tab = createBottomTabNavigator();
@@ -218,6 +219,7 @@ export default function AppNavigator() {
                 <Stack.Screen name="SponsorMatchDetails" component={SponsorMatchDetailsScreen} />
                 <Stack.Screen name="NewChat" component={NewChat} />
                 <Stack.Screen name="Chat" component={ChatScreen} />
+                <Stack.Screen name="SponsorOpportunityDetails" component={SponsorOpportunityDetailsScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );

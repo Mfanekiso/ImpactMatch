@@ -14,12 +14,10 @@ import {
     query,
     where,
     getDocs,
-    doc,
-    setDoc,
-    serverTimestamp,
 } from "firebase/firestore";
 
-import { auth, db } from "../../../Backend/firebaseConfig";
+import { db } from "../../../Backend/firebaseConfig";
+import { startConversationWithNgo } from "../../utils/startConversation";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -62,75 +60,9 @@ export default function NewChat({ navigation }) {
         }
     };
 
-    const startConversation = async (organisation) => {
-        try {
-            const currentUser = auth.currentUser;
-
-            if (!currentUser) {
-                return;
-            }
-
-            const sponsorId = currentUser.uid;
-            const ngoId = organisation.id;
-
-            // Always create the same conversation ID
-            // for the same sponsor + NGO combination.
-            const conversationId = [sponsorId, ngoId]
-                .sort()
-                .join("_");
-
-            const sponsorName =
-                currentUser.displayName || "Sponsor";
-
-            const ngoName =
-                organisation.organisationName ||
-                organisation.name ||
-                "Organisation";
-
-            const conversationRef = doc(
-                db,
-                "conversations",
-                conversationId
-            );
-
-            await setDoc(
-                conversationRef,
-                {
-                    participants: [sponsorId, ngoId],
-
-                    participantDetails: {
-                        [sponsorId]: {
-                            name: sponsorName,
-                            role: "sponsor",
-                        },
-
-                        [ngoId]: {
-                            name: ngoName,
-                            role: "ngo",
-                        },
-                    },
-
-                    lastMessage: "",
-                    lastMessageAt: null,
-
-                    unreadCount: {
-                        [sponsorId]: 0,
-                        [ngoId]: 0,
-                    },
-
-                    createdAt: serverTimestamp(),
-                },
-                { merge: true }
-            );
-
-            navigation.navigate("Chat", {
-                conversationId,
-                otherUserName: ngoName,
-            });
-        } catch (error) {
-            console.log("Error starting conversation:", error);
-        }
-    };
+    // Shared helper (utils/startConversation.js) creates or re-opens the chat
+    const startConversation = (organisation) =>
+        startConversationWithNgo(navigation, organisation);
 
     const renderOrganisation = ({ item }) => {
         const name =
