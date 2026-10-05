@@ -19,6 +19,8 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 // Firebase imports
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../../Backend/firebaseConfig"; // Adjust path if needed
+import CauseChips from "../../components/sponsors/CauseChips";
+import { parseAmount } from "../../utils/matchScore";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -41,7 +43,7 @@ export default function SponsorSetupScreen({ route, navigation }) {
     const [industry, setIndustry] = useState("");
     const [location, setLocation] = useState("");
     const [fundingBudget, setFundingBudget] = useState("");
-    const [preferredCauses, setPreferredCauses] = useState("");
+    const [preferredCauses, setPreferredCauses] = useState([]); // array of cause names
     const [focusedField, setFocusedField] = useState(null);
     const [saving, setSaving] = useState(false);
 
@@ -52,12 +54,19 @@ export default function SponsorSetupScreen({ route, navigation }) {
             !industry.trim() ||
             !location.trim() ||
             !fundingBudget.trim() ||
-            !preferredCauses.trim()
+            preferredCauses.length === 0
         ) {
             Alert.alert(
                 "Missing Information",
                 "Please complete all fields before continuing."
             );
+            return;
+        }
+
+        // Store the budget as a real number so it can be used for matching
+        const budgetNumber = parseAmount(fundingBudget);
+        if (budgetNumber == null || budgetNumber <= 0) {
+            Alert.alert("Invalid Budget", "Please enter your annual funding budget as a number, e.g. 500000.");
             return;
         }
 
@@ -75,7 +84,7 @@ export default function SponsorSetupScreen({ route, navigation }) {
                 organisationName: organisationName,
                 industry: industry,
                 location: location,
-                fundingBudget: fundingBudget,
+                fundingBudget: budgetNumber,
                 preferredCauses: preferredCauses,
                 profileCompleted: true // Flag to indicate profile setup is done
             });
@@ -250,7 +259,7 @@ export default function SponsorSetupScreen({ route, navigation }) {
                                     />
                                     <TextInput
                                         style={styles.input}
-                                        placeholder="e.g. R500 000"
+                                        placeholder="e.g. 500000"
                                         placeholderTextColor={COLORS.placeholder}
                                         value={fundingBudget}
                                         onChangeText={setFundingBudget}
@@ -264,36 +273,10 @@ export default function SponsorSetupScreen({ route, navigation }) {
                             {/* Preferred Causes */}
                             <View style={styles.fieldWrapper}>
                                 <Text style={styles.fieldLabel}>PREFERRED CAUSES</Text>
-                                <View
-                                    style={[
-                                        styles.inputContainer,
-                                        styles.multilineContainer,
-                                        focusedField === "preferredCauses" &&
-                                            styles.inputContainerFocused,
-                                    ]}
-                                >
-                                    <Ionicons
-                                        name="heart-outline"
-                                        size={19}
-                                        color={
-                                            focusedField === "preferredCauses"
-                                                ? COLORS.primary
-                                                : COLORS.textSecondary
-                                        }
-                                        style={styles.multilineIcon}
-                                    />
-                                    <TextInput
-                                        style={[styles.input, styles.multilineInput]}
-                                        placeholder="Which causes would you like to support? e.g. Education, Healthcare"
-                                        placeholderTextColor={COLORS.placeholder}
-                                        value={preferredCauses}
-                                        onChangeText={setPreferredCauses}
-                                        multiline
-                                        numberOfLines={3}
-                                        onFocus={() => setFocusedField("preferredCauses")}
-                                        onBlur={() => setFocusedField(null)}
-                                    />
-                                </View>
+                                <CauseChips
+                                    selected={preferredCauses}
+                                    onChange={setPreferredCauses}
+                                />
                             </View>
 
                             {/* Create Profile Button */}
