@@ -11,10 +11,12 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../../../Backend/firebaseConfig";
+import { auth, db } from "../../../Backend/firebaseConfig";
+import { loadSponsorInterests, setSaved, setInterested } from "../../utils/interests";
 
 // ======================================================
 // MOCK PROJECT DATA
@@ -101,6 +103,9 @@ export default function SponsorDiscoverScreen() {
 
   const [favorites, setFavorites] = useState({});
 
+  // Which NGOs the sponsor has pressed "Express Interest" on ({ [ngoId]: true })
+  const [interestedIds, setInterestedIds] = useState({});
+
   // Firebase NGO data
   const [ngos, setNgos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -185,11 +190,64 @@ export default function SponsorDiscoverScreen() {
   // FAVORITES
   // ====================================================
 
-  const toggleFavorite = (id) => {
+  // Load saved / interested NGOs from Firestore
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    loadSponsorInterests(uid)
+      .then((map) => {
+        const savedMap = {};
+        const interestedMap = {};
+        Object.keys(map).forEach((ngoId) => {
+          if (map[ngoId].saved) savedMap[ngoId] = true;
+          if (map[ngoId].interested) interestedMap[ngoId] = true;
+        });
+        setFavorites((previous) => ({ ...previous, ...savedMap }));
+        setInterestedIds(interestedMap);
+      })
+      .catch((error) => console.log("Error loading interests:", error?.message));
+  }, []);
+
+  const toggleFavorite = async (id) => {
+    const next = !favorites[id];
+
     setFavorites((previous) => ({
       ...previous,
-      [id]: !previous[id],
+      [id]: next,
     }));
+
+    // Only real NGOs are saved to Firestore (mock projects stay local)
+    if (!ngos.some((ngo) => ngo.id === id)) return;
+
+    try {
+      await setSaved(id, next);
+    } catch (error) {
+      setFavorites((previous) => ({
+        ...previous,
+        [id]: !next,
+      }));
+      Alert.alert("Could not save", error?.message || "Please try again.");
+    }
+  };
+
+  const toggleInterest = async (id) => {
+    const next = !interestedIds[id];
+
+    setInterestedIds((previous) => ({
+      ...previous,
+      [id]: next,
+    }));
+
+    try {
+      await setInterested(id, next);
+    } catch (error) {
+      setInterestedIds((previous) => ({
+        ...previous,
+        [id]: !next,
+      }));
+      Alert.alert("Could not update interest", error?.message || "Please try again.");
+    }
   };
 
   // ====================================================
@@ -1167,8 +1225,14 @@ export default function SponsorDiscoverScreen() {
                   {/* EXPRESS INTEREST */}
 
                   <TouchableOpacity
-                    style={
-                      styles.expressInterestButton
+                    style={[
+                      styles.expressInterestButton,
+                      interestedIds[selectedOrg.id] && {
+                        backgroundColor: "#64748B",
+                      },
+                    ]}
+                    onPress={() =>
+                      toggleInterest(selectedOrg.id)
                     }
                   >
                     <Text
@@ -1176,7 +1240,9 @@ export default function SponsorDiscoverScreen() {
                         styles.primaryButtonText
                       }
                     >
-                      Express Interest
+                      {interestedIds[selectedOrg.id]
+                        ? "Interest Sent ✓ (tap to withdraw)"
+                        : "Express Interest"}
                     </Text>
                   </TouchableOpacity>
 

@@ -16,6 +16,12 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import * as ImagePicker from "expo-image-picker";
 
 import EditProfileModal from "../../components/sponsors/EditProfileModal";
+import AccountDetailsModal from "../../components/sponsors/AccountDetailsModal";
+import PreferredCausesModal from "../../components/sponsors/PreferredCausesModal";
+import DeleteAccountModal from "../../components/sponsors/DeleteAccountModal";
+import { parseAmount } from "../../utils/matchScore";
+import { formatCauses } from "../../utils/causes";
+import { deleteSponsorAccount } from "../../utils/deleteAccount";
 
 // Firebase imports
 import { doc, getDoc, updateDoc } from "firebase/firestore";
@@ -102,6 +108,9 @@ export default function SponsorProfileScreen({ navigation }) {
     const [notifUpdates, setNotifUpdates] = useState(true);
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
     const [editProfileVisible, setEditProfileVisible] = useState(false);
+    const [accountDetailsVisible, setAccountDetailsVisible] = useState(false);
+    const [causesVisible, setCausesVisible] = useState(false);
+    const [deleteVisible, setDeleteVisible] = useState(false);
 
     // Pull the real sponsor document from Firestore
     const fetchProfile = async () => {
@@ -186,6 +195,42 @@ export default function SponsorProfileScreen({ navigation }) {
             }));
         } catch (error) {
             Alert.alert("Error Saving Profile", error.message);
+        }
+    };
+
+    // Industry + budget (Account Details row)
+    const handleSaveAccountDetails = async ({ industry, fundingBudget }) => {
+        if (!uid) return;
+        try {
+            await updateDoc(doc(db, "users", uid), { industry, fundingBudget });
+            setProfile((prev) => ({ ...prev, industry, fundingBudget }));
+            setAccountDetailsVisible(false);
+        } catch (error) {
+            Alert.alert("Error Saving Details", error.message);
+        }
+    };
+
+    // Preferred causes (array of cause names)
+    const handleSaveCauses = async (causes) => {
+        if (!uid) return;
+        try {
+            await updateDoc(doc(db, "users", uid), { preferredCauses: causes });
+            setProfile((prev) => ({ ...prev, preferredCauses: causes }));
+            setCausesVisible(false);
+        } catch (error) {
+            Alert.alert("Error Saving Causes", error.message);
+        }
+    };
+
+    // Delete account: the modal shows any error, so just let it throw
+    const handleDeleteAccount = async (password) => {
+        await deleteSponsorAccount(password);
+        setDeleteVisible(false);
+        const parent = navigation.getParent?.();
+        if (parent?.reset) {
+            parent.reset({ index: 0, routes: [{ name: "Welcome" }] });
+        } else {
+            navigation.navigate("Welcome");
         }
     };
 
@@ -295,8 +340,8 @@ export default function SponsorProfileScreen({ navigation }) {
                             iconBg={COLORS.blueLight}
                             iconColor={COLORS.blue}
                             title="Account Details"
-                            subtitle={`Industry: ${industry || "Not provided"} · Budget: ${fundingBudget ? `R${fundingBudget}` : "Not provided"}`}
-                            onPress={() => {}}
+                            subtitle={`Industry: ${industry || "Not provided"} · Budget: ${parseAmount(fundingBudget) != null ? `R${parseAmount(fundingBudget).toLocaleString("en-ZA")}` : "Not provided"}`}
+                            onPress={() => setAccountDetailsVisible(true)}
                         />
                         <View style={styles.divider} />
                         <ProfileRow
@@ -304,8 +349,8 @@ export default function SponsorProfileScreen({ navigation }) {
                             iconBg={COLORS.purpleLight}
                             iconColor={COLORS.purple}
                             title="Preferred Causes"
-                            subtitle={preferredCauses || "Not provided"}
-                            onPress={() => {}}
+                            subtitle={formatCauses(preferredCauses) || "Not provided"}
+                            onPress={() => setCausesVisible(true)}
                         />
                     </View>
 
@@ -403,7 +448,7 @@ export default function SponsorProfileScreen({ navigation }) {
                             titleColor={COLORS.danger}
                             title="Delete Account"
                             subtitle="Permanently delete your account and all associated data"
-                            onPress={() => {}}
+                            onPress={() => setDeleteVisible(true)}
                         />
                     </View>
 
@@ -431,6 +476,27 @@ export default function SponsorProfileScreen({ navigation }) {
                     handleSaveProfile(updatedProfile);
                     setEditProfileVisible(false);
                 }}
+            />
+
+            <AccountDetailsModal
+                visible={accountDetailsVisible}
+                onClose={() => setAccountDetailsVisible(false)}
+                onSave={handleSaveAccountDetails}
+                initialIndustry={industry}
+                initialBudget={fundingBudget}
+            />
+
+            <PreferredCausesModal
+                visible={causesVisible}
+                onClose={() => setCausesVisible(false)}
+                onSave={handleSaveCauses}
+                initialCauses={preferredCauses}
+            />
+
+            <DeleteAccountModal
+                visible={deleteVisible}
+                onClose={() => setDeleteVisible(false)}
+                onConfirm={handleDeleteAccount}
             />
         </SafeAreaView>
     );
