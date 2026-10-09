@@ -16,6 +16,7 @@ import {
     getDocs,
     doc,
     setDoc,
+    getDoc,
     serverTimestamp,
 } from "firebase/firestore";
 
@@ -33,59 +34,117 @@ const COLORS = {
 };
 
 export default function NewChat({ navigation }) {
-    const [organisations, setOrganisations] = useState([]);
+    const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [currentUserData, setCurrentUserData] = useState(null);
 
     useEffect(() => {
-        loadOrganisations();
+        loadUsers();
     }, []);
 
-    const loadOrganisations = async () => {
+    const loadUsers = async () => {
         try {
-            const ngoQuery = query(
-                collection(db, "users"),
-                where("role", "==", "ngo")
+            const currentUser = auth.currentUser;
+
+            if (!currentUser) {
+                setLoading(false);
+                return;
+            }
+
+            // Get the logged-in user's Firestore profile
+            const currentUserRef = doc(
+                db,
+                "users",
+                currentUser.uid
             );
 
-            const snapshot = await getDocs(ngoQuery);
+            const currentUserSnapshot =
+                await getDoc(currentUserRef);
 
-            const ngoList = snapshot.docs.map((document) => ({
-                id: document.id,
-                ...document.data(),
-            }));
+            if (!currentUserSnapshot.exists()) {
+                console.log("Current user profile not found.");
+                setLoading(false);
+                return;
+            }
 
-            setOrganisations(ngoList);
+            const currentUserProfile =
+                currentUserSnapshot.data();
+
+            setCurrentUserData(currentUserProfile);
+
+            const currentRole = currentUserProfile.role;
+
+            // Sponsor → show NGOs
+            // NGO → show Sponsors
+            const targetRole =
+                currentRole === "sponsor"
+                    ? "ngo"
+                    : "sponsor";
+
+            const usersQuery = query(
+                collection(db, "users"),
+                where("role", "==", targetRole)
+            );
+
+            const snapshot = await getDocs(usersQuery);
+
+            const userList = snapshot.docs
+                .map((document) => ({
+                    id: document.id,
+                    ...document.data(),
+                }))
+                .filter(
+                    (user) => user.id !== currentUser.uid
+                );
+
+            setUsers(userList);
         } catch (error) {
-            console.log("Error loading organisations:", error);
+            console.log("Error loading users:", error);
         } finally {
             setLoading(false);
         }
     };
 
-    const startConversation = async (organisation) => {
+    const getUserName = (user) => {
+        if (user.role === "ngo") {
+            return (
+                user.organisationName ||
+                user.full_name ||
+                user.name ||
+                "Organisation"
+            );
+        }
+
+        return (
+            user.organisationName ||
+            user.full_name ||
+            user.fullName ||
+            user.name ||
+            "Sponsor"
+        );
+    };
+
+    const startConversation = async (otherUser) => {
         try {
             const currentUser = auth.currentUser;
 
-            if (!currentUser) {
+            if (!currentUser || !currentUserData) {
                 return;
             }
 
-            const sponsorId = currentUser.uid;
-            const ngoId = organisation.id;
+            const currentUserId = currentUser.uid;
+            const otherUserId = otherUser.id;
 
-            // Always create the same conversation ID
-            // for the same sponsor + NGO combination.
-            const conversationId = [sponsorId, ngoId]
+            /*
+             * The same two users will always get
+             * the same conversation ID.
+             */
+            const conversationId = [
+                currentUserId,
+                otherUserId,
+            ]
                 .sort()
                 .join("_");
-
-            const sponsorName =
-                currentUser.displayName || "Sponsor";
-
-            const ngoName =
-                organisation.organisationName ||
-                organisation.name ||
-                "Organisation";
 
             const conversationRef = doc(
                 db,
@@ -93,20 +152,30 @@ export default function NewChat({ navigation }) {
                 conversationId
             );
 
+            const currentUserName = getUserName({
+                ...currentUserData,
+                role: currentUserData.role,
+            });
+
+            const otherUserName = getUserName(otherUser);
+
             await setDoc(
                 conversationRef,
                 {
-                    participants: [sponsorId, ngoId],
+                    participants: [
+                        currentUserId,
+                        otherUserId,
+                    ],
 
                     participantDetails: {
-                        [sponsorId]: {
-                            name: sponsorName,
-                            role: "sponsor",
+                        [currentUserId]: {
+                            name: currentUserName,
+                            role: currentUserData.role,
                         },
 
-                        [ngoId]: {
-                            name: ngoName,
-                            role: "ngo",
+                        [otherUserId]: {
+                            name: otherUserName,
+                            role: otherUser.role,
                         },
                     },
 
@@ -114,33 +183,35 @@ export default function NewChat({ navigation }) {
                     lastMessageAt: null,
 
                     unreadCount: {
-                        [sponsorId]: 0,
-                        [ngoId]: 0,
+                        [currentUserId]: 0,
+                        [otherUserId]: 0,
                     },
 
                     createdAt: serverTimestamp(),
                 },
-                { merge: true }
+                {
+                    merge: true,
+                }
             );
 
             navigation.navigate("Chat", {
                 conversationId,
-                otherUserName: ngoName,
+                otherUserName,
             });
         } catch (error) {
-            console.log("Error starting conversation:", error);
+            console.log(
+                "Error starting conversation:",
+                error
+            );
         }
     };
 
-    const renderOrganisation = ({ item }) => {
-        const name =
-            item.organisationName ||
-            item.name ||
-            "Organisation";
+    const renderUser = ({ item }) => {
+        const name = getUserName(item);
 
         return (
             <TouchableOpacity
-                style={styles.organisationRow}
+                style={styles.userRow}
                 activeOpacity={0.7}
                 onPress={() => startConversation(item)}
             >
@@ -150,13 +221,15 @@ export default function NewChat({ navigation }) {
                     </Text>
                 </View>
 
-                <View style={styles.info}>
+                <View style={styles.userInfo}>
                     <Text style={styles.name}>
                         {name}
                     </Text>
 
                     <Text style={styles.role}>
-                        NGO / NPO
+                        {item.role === "ngo"
+                            ? "NGO / NPO"
+                            : "Sponsor"}
                     </Text>
                 </View>
             </TouchableOpacity>
@@ -173,12 +246,15 @@ export default function NewChat({ navigation }) {
                     />
 
                     <Text style={styles.loadingText}>
-                        Loading organisations...
+                        Loading...
                     </Text>
                 </View>
             </SafeAreaView>
         );
     }
+
+    const isSponsor =
+        currentUserData?.role === "sponsor";
 
     return (
         <SafeAreaView style={styles.container}>
@@ -195,21 +271,39 @@ export default function NewChat({ navigation }) {
                 </Text>
             </View>
 
-            {organisations.length === 0 ? (
+            <View style={styles.intro}>
+                <Text style={styles.introTitle}>
+                    {isSponsor
+                        ? "Choose an organisation"
+                        : "Choose a sponsor"}
+                </Text>
+
+                <Text style={styles.introText}>
+                    {isSponsor
+                        ? "Select an organisation to start a conversation."
+                        : "Select a sponsor to start a conversation."}
+                </Text>
+            </View>
+
+            {users.length === 0 ? (
                 <View style={styles.emptyContainer}>
                     <Text style={styles.emptyTitle}>
-                        No organisations found
+                        No users found
                     </Text>
 
                     <Text style={styles.emptyText}>
-                        There are currently no NGOs available to contact.
+                        There are currently no{" "}
+                        {isSponsor
+                            ? "organisations"
+                            : "sponsors"}{" "}
+                        available to contact.
                     </Text>
                 </View>
             ) : (
                 <FlatList
-                    data={organisations}
+                    data={users}
                     keyExtractor={(item) => item.id}
-                    renderItem={renderOrganisation}
+                    renderItem={renderUser}
                     showsVerticalScrollIndicator={false}
                 />
             )}
@@ -248,7 +342,24 @@ const styles = StyleSheet.create({
         color: COLORS.textPrimary,
     },
 
-    organisationRow: {
+    intro: {
+        paddingHorizontal: 20,
+        paddingVertical: 18,
+    },
+
+    introTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+        color: COLORS.textPrimary,
+    },
+
+    introText: {
+        marginTop: 5,
+        fontSize: 14,
+        color: COLORS.textSecondary,
+    },
+
+    userRow: {
         flexDirection: "row",
         alignItems: "center",
         paddingHorizontal: 20,
@@ -273,7 +384,7 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
     },
 
-    info: {
+    userInfo: {
         flex: 1,
     },
 

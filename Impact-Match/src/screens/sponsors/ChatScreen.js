@@ -9,6 +9,7 @@ import {
     SafeAreaView,
     KeyboardAvoidingView,
     Platform,
+    Alert,
 } from "react-native";
 
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -22,6 +23,7 @@ import {
     serverTimestamp,
     doc,
     updateDoc,
+    deleteDoc,
 } from "firebase/firestore";
 
 import { auth, db } from "../../../Backend/firebaseConfig";
@@ -42,6 +44,9 @@ export default function ChatScreen({ navigation, route }) {
 
     const [messages, setMessages] = useState([]);
     const [messageText, setMessageText] = useState("");
+
+    const [editingMessageId, setEditingMessageId] = useState(null);
+    const [editingText, setEditingText] = useState("");
 
     const currentUser = auth.currentUser;
 
@@ -118,9 +123,136 @@ export default function ChatScreen({ navigation, route }) {
         }
     };
 
+    const formatMessageTime = (timestamp) => {
+        if (!timestamp) {
+            return "";
+        }
+
+        const date = timestamp.toDate
+            ? timestamp.toDate()
+            : new Date(timestamp);
+
+        return date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    };
+
+    const startEditing = (message) => {
+        setEditingMessageId(message.id);
+        setEditingText(message.text);
+    };
+
+    const cancelEditing = () => {
+        setEditingMessageId(null);
+        setEditingText("");
+    };
+
+    const saveEditedMessage = async () => {
+        const text = editingText.trim();
+
+        if (!text || !editingMessageId) {
+            return;
+        }
+
+        try {
+            const messageRef = doc(
+                db,
+                "conversations",
+                conversationId,
+                "messages",
+                editingMessageId
+            );
+
+            await updateDoc(messageRef, {
+                text: text,
+            });
+
+            const conversationRef = doc(
+                db,
+                "conversations",
+                conversationId
+            );
+
+            await updateDoc(conversationRef, {
+                lastMessage: text,
+                lastMessageAt: serverTimestamp(),
+            });
+
+            cancelEditing();
+        } catch (error) {
+            console.log("Edit message error:", error);
+        }
+    };
+
+    const deleteMessage = (messageId) => {
+        Alert.alert(
+            "Delete message",
+            "Are you sure you want to delete this message?",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel",
+                },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const messageRef = doc(
+                                db,
+                                "conversations",
+                                conversationId,
+                                "messages",
+                                messageId
+                            );
+
+                            await deleteDoc(messageRef);
+                        } catch (error) {
+                            console.log(
+                                "Delete message error:",
+                                error
+                            );
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const handleMessageLongPress = (message) => {
+        // Only allow the sender to edit/delete their own message.
+        if (message.senderId !== currentUser?.uid) {
+            return;
+        }
+
+        Alert.alert(
+            "Message",
+            "What would you like to do?",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel",
+                },
+                {
+                    text: "Edit",
+                    onPress: () => startEditing(message),
+                },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => deleteMessage(message.id),
+                },
+            ]
+        );
+    };
+
     const renderMessage = ({ item }) => {
         const isMine =
             item.senderId === currentUser?.uid;
+
+        const isEditing =
+            editingMessageId === item.id;
 
         return (
             <View
@@ -129,7 +261,12 @@ export default function ChatScreen({ navigation, route }) {
                     isMine && styles.myMessageRow,
                 ]}
             >
-                <View
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    onLongPress={() =>
+                        handleMessageLongPress(item)
+                    }
+                    delayLongPress={500}
                     style={[
                         styles.messageBubble,
                         isMine
@@ -137,17 +274,74 @@ export default function ChatScreen({ navigation, route }) {
                             : styles.theirMessageBubble,
                     ]}
                 >
-                    <Text
-                        style={[
-                            styles.messageText,
-                            isMine
-                                ? styles.myMessageText
-                                : styles.theirMessageText,
-                        ]}
-                    >
-                        {item.text}
-                    </Text>
-                </View>
+                    {isEditing ? (
+                        <View>
+                            <TextInput
+                                style={styles.editInput}
+                                value={editingText}
+                                onChangeText={setEditingText}
+                                multiline
+                                autoFocus
+                            />
+
+                            <View style={styles.editActions}>
+                                <TouchableOpacity
+                                    onPress={cancelEditing}
+                                    style={styles.cancelButton}
+                                >
+                                    <Text
+                                        style={
+                                            styles.cancelButtonText
+                                        }
+                                    >
+                                        Cancel
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={saveEditedMessage}
+                                    style={styles.saveButton}
+                                >
+                                    <Text
+                                        style={
+                                            styles.saveButtonText
+                                        }
+                                    >
+                                        Save
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    ) : (
+                        <>
+                            <Text
+                                style={[
+                                    styles.messageText,
+                                    isMine
+                                        ? styles.myMessageText
+                                        : styles.theirMessageText,
+                                ]}
+                            >
+                                {item.text}
+                            </Text>
+
+                            <View style={styles.timeRow}>
+                                <Text
+                                    style={[
+                                        styles.messageTime,
+                                        isMine
+                                            ? styles.myMessageTime
+                                            : styles.theirMessageTime,
+                                    ]}
+                                >
+                                    {formatMessageTime(
+                                        item.createdAt
+                                    )}
+                                </Text>
+                            </View>
+                        </>
+                    )}
+                </TouchableOpacity>
             </View>
         );
     };
@@ -183,7 +377,7 @@ export default function ChatScreen({ navigation, route }) {
                         </Text>
 
                         <Text style={styles.headerStatus}>
-                            Organisation
+                            Conversation
                         </Text>
                     </View>
                 </View>
@@ -318,6 +512,23 @@ const styles = StyleSheet.create({
         color: COLORS.textPrimary,
     },
 
+    timeRow: {
+        marginTop: 4,
+        alignItems: "flex-end",
+    },
+
+    messageTime: {
+        fontSize: 10,
+    },
+
+    myMessageTime: {
+        color: "rgba(255, 255, 255, 0.75)",
+    },
+
+    theirMessageTime: {
+        color: COLORS.textSecondary,
+    },
+
     inputContainer: {
         flexDirection: "row",
         alignItems: "flex-end",
@@ -354,5 +565,46 @@ const styles = StyleSheet.create({
 
     sendButtonDisabled: {
         opacity: 0.45,
+    },
+
+    editInput: {
+        minWidth: 180,
+        maxWidth: 260,
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: COLORS.white,
+        color: COLORS.textPrimary,
+        fontSize: 15,
+    },
+
+    editActions: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        marginTop: 8,
+        gap: 8,
+    },
+
+    cancelButton: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+
+    cancelButtonText: {
+        color: COLORS.textSecondary,
+        fontSize: 13,
+        fontWeight: "600",
+    },
+
+    saveButton: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+        backgroundColor: COLORS.primary,
+    },
+
+    saveButtonText: {
+        color: COLORS.white,
+        fontSize: 13,
+        fontWeight: "600",
     },
 });
