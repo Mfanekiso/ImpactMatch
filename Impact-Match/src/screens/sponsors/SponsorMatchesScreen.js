@@ -16,6 +16,7 @@ import { collection, query, where, getDocs, doc, getDoc } from "firebase/firesto
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { computeMatch } from "../../utils/matchScore";
 import { loadSponsorInterests, getMatchStatus } from "../../utils/interests";
+import { readLocalCache, writeLocalCache } from "../../utils/profileCache";
 
 // Cycle of avatar colours (Firestore doesn't store one)
 const AVATAR_COLORS = ["#10B981", "#2563EB", "#DB2777", "#7C3AED", "#C2410C", "#0EA5E9"];
@@ -113,8 +114,8 @@ export default function SponsorMatchesScreen({ navigation }) {
 
     // Load real NGOs + the sponsor's profile, then score each NGO
     const loadMatches = useCallback(async () => {
+        const uid = auth.currentUser?.uid;
         try {
-            const uid = auth.currentUser?.uid;
 
             let sponsorProfile = {};
             if (uid) {
@@ -135,6 +136,7 @@ export default function SponsorMatchesScreen({ navigation }) {
             );
 
             const results = snapshot.docs
+                .filter((docSnap) => docSnap.data().profileCompleted)
                 .map((docSnap, index) => {
                     const data = docSnap.data();
                     const { matchScore, breakdown, whyYouMatch } = computeMatch(
@@ -160,8 +162,11 @@ export default function SponsorMatchesScreen({ navigation }) {
                 .sort((a, b) => b.matchScore - a.matchScore);
 
             setMatches(results);
+            if (uid) await writeLocalCache(`sponsor-matches:${uid}`, results);
         } catch (error) {
             console.log("Error loading matches:", error?.message);
+            const cached = uid ? await readLocalCache(`sponsor-matches:${uid}`) : null;
+            if (cached) setMatches(cached);
         } finally {
             setLoading(false);
         }

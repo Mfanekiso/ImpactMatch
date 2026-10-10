@@ -19,6 +19,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import { cacheProfile } from "../../utils/profileCache";
 
 const COLORS = {
     background: "#F8F6EE",
@@ -97,6 +98,7 @@ export default function LoginScreen({ navigation }) {
             const user = userCredentials.user;
             const userSnap = await getDoc(doc(db, "users", user.uid));
             const userData = userSnap.exists() ? userSnap.data() : null;
+            if (userData) await cacheProfile(user.uid, userData);
 
             if (!userData || !userData.role) {
                 navigation.replace("UserType", { uid: user.uid });
@@ -106,7 +108,10 @@ export default function LoginScreen({ navigation }) {
                     { uid: user.uid, role: userData.role }
                 );
             } else {
-                navigation.replace(userData.role === "ngo" ? "MainTabs" : "SponsorTabs");
+                navigation.replace(userData.role === "ngo" ? "MainTabs" : "SponsorTabs", {
+                    screen: "Home",
+                    params: { organisationName: userData.organisationName, user: userData },
+                });
             }
         } catch (error) {
             setLoginError(getFriendlyError(error));

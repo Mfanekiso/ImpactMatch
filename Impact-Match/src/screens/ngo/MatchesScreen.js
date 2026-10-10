@@ -1,189 +1,121 @@
-import React, { useState } from "react";
-import {
-    View,
-    Text,
-    TextInput,
-    StyleSheet,
-    TouchableOpacity,
-    SafeAreaView,
-    StatusBar,
-} from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View, FlatList } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { auth, db } from "../../../Backend/firebaseConfig";
+import { computeMatch } from "../../utils/matchScore";
+import { readLocalCache, writeLocalCache } from "../../utils/profileCache";
 
-// ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
-const COLORS = {
-    background: "#F8F6EE",       // Cream base
-    surface: "#FFFFFF",          // Clean white
-    primary: "#D9C982",          // Soft Luxury Gold
-    primarySoft: "rgba(217, 201, 130, 0.2)",
-    emerald: "#059669",          // Vibrant Emerald for actions
-    textPrimary: "#433327",      // Warm Bronze instead of harsh black
-    textSecondary: "#8C7A6B",    // Muted taupe for secondary text
-    placeholder: "#B8A99A",
-    border: "#E8DFD5",
-    white: "#FFFFFF",
-};
+const COLORS = { background: "#F8F6EE", surface: "#FFFFFF", primary: "#059669", text: "#433327", muted: "#8C7A6B", border: "#E8DFD5" };
 
 export default function MatchesScreen({ navigation }) {
     const [searchQuery, setSearchQuery] = useState("");
+    const [matches, setMatches] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
-    const handleCheckAgain = () => {
-        // Trigger a refresh of sponsor matches
-    };
+    const loadMatches = useCallback(async () => {
+        setLoading(true);
+        setError(false);
+        const uid = auth.currentUser?.uid;
+        try {
+            if (!uid) { setMatches([]); return; }
+            const [ngoSnap, sponsorsSnap, interestsSnap] = await Promise.all([
+                getDoc(doc(db, "users", uid)),
+                getDocs(query(collection(db, "users"), where("role", "==", "sponsor"))),
+                getDocs(query(collection(db, "interests"), where("ngoId", "==", uid))),
+            ]);
+            const ngo = ngoSnap.exists() ? ngoSnap.data() : {};
+            const interestBySponsor = {};
+            interestsSnap.docs.forEach((entry) => { interestBySponsor[entry.data().sponsorId] = entry.data(); });
+            const rows = sponsorsSnap.docs
+                .filter((entry) => entry.id !== uid && entry.data().profileCompleted)
+                .map((entry) => {
+                    const sponsor = entry.data();
+                    const { matchScore } = computeMatch(sponsor, ngo);
+                    const interest = interestBySponsor[entry.id] || {};
+                    return {
+                        id: entry.id,
+                        name: sponsor.organisationName || "Sponsor",
+                        industry: sponsor.industry || "Sponsor",
+                        location: sponsor.location || "Location not provided",
+                        causes: Array.isArray(sponsor.preferredCauses) ? sponsor.preferredCauses : [],
+                        budget: sponsor.fundingBudget,
+                        matchScore,
+                        interested: !!interest.interested,
+                        mutual: !!interest.interested && !!interest.ngoInterested,
+                    };
+                })
+                .sort((a, b) => b.matchScore - a.matchScore);
+            setMatches(rows);
+            await writeLocalCache(`ngo-matches:${uid}`, rows);
+        } catch (loadError) {
+            console.warn("Could not load live sponsor matches:", loadError?.message);
+            const cached = uid ? await readLocalCache(`ngo-matches:${uid}`) : null;
+            setError(!cached);
+            setMatches(cached || []);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadMatches();
+        const unsubscribe = navigation.addListener("focus", loadMatches);
+        return unsubscribe;
+    }, [loadMatches, navigation]);
+
+    const filtered = useMemo(() => matches.filter((match) =>
+        `${match.name} ${match.industry} ${match.location} ${match.causes.join(" ")}`.toLowerCase().includes(searchQuery.toLowerCase())
+    ), [matches, searchQuery]);
+
+    const renderMatch = ({ item }) => (
+        <TouchableOpacity style={styles.card} activeOpacity={0.82} onPress={() => navigation.navigate("SponsorDetails", { sponsor: { ...item, type: item.industry, matchPercentage: item.matchScore, tags: item.causes, description: "", budget: item.budget ? `R${Number(item.budget).toLocaleString("en-ZA")}` : "Not disclosed" }, ngoId: auth.currentUser?.uid })}>
+            <View style={styles.score}><Text style={styles.scoreText}>{item.matchScore}%</Text></View>
+            <View style={styles.info}>
+                <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.meta} numberOfLines={1}>{item.industry} · {item.location}</Text>
+                <Text style={styles.tags} numberOfLines={1}>{item.causes.join(" · ") || "No causes listed"}</Text>
+                {item.mutual && <Text style={styles.mutual}>Mutual interest</Text>}
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={COLORS.muted} />
+        </TouchableOpacity>
+    );
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Matches</Text>
+            <View style={styles.header}><Text style={styles.title}>Sponsor matches</Text><Text style={styles.subtitle}>Real sponsors ranked by fit with your organisation.</Text></View>
+            <View style={styles.search}>
+                <Ionicons name="search-outline" size={20} color={COLORS.muted} />
+                <TextInput style={styles.input} placeholder="Search sponsors or causes" placeholderTextColor={COLORS.muted} value={searchQuery} onChangeText={setSearchQuery} autoCapitalize="none" />
             </View>
-
-            {/* Search Input */}
-            <View style={styles.searchContainer}>
-                <Ionicons name="search-outline" size={20} color={COLORS.placeholder} />
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search sponsors or NGOs..."
-                    placeholderTextColor={COLORS.placeholder}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                />
-            </View>
-
-            {/* Empty State */}
-            <View style={styles.emptyState}>
-                <View style={styles.emptyIconWrapper}>
-                    <Ionicons
-                        name="people-outline" // Swapped to people to match the tab icon theme
-                        size={42}
-                        color={COLORS.primary}
-                    />
-                </View>
-
-                <Text style={styles.emptyTitle}>No Matches Available</Text>
-                <Text style={styles.emptySubtitle}>
-                    There are no active or available sponsors currently. Please check again later.
-                </Text>
-
-                {/* Added the missing refresh button from your styles to complete the UI */}
-                <TouchableOpacity
-                    style={styles.refreshButton}
-                    activeOpacity={0.85}
-                    onPress={handleCheckAgain}
-                >
-                    <Ionicons 
-                        name="refresh" 
-                        size={18} 
-                        color={COLORS.white} 
-                        style={styles.refreshButtonIcon} 
-                    />
-                    <Text style={styles.refreshButtonText}>Check Again</Text>
-                </TouchableOpacity>
-            </View>
+            {loading ? <ActivityIndicator style={styles.center} size="large" color={COLORS.primary} /> : error ? (
+                <View style={styles.center}><Text style={styles.emptyTitle}>Couldn’t load matches</Text><Text style={styles.emptyText}>Check your connection and try again.</Text><TouchableOpacity style={styles.button} onPress={loadMatches}><Text style={styles.buttonText}>Try again</Text></TouchableOpacity></View>
+            ) : filtered.length ? <FlatList data={filtered} renderItem={renderMatch} keyExtractor={(item) => item.id} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false} /> : (
+                <View style={styles.center}><View style={styles.emptyIcon}><Ionicons name="people-outline" size={36} color={COLORS.primary} /></View><Text style={styles.emptyTitle}>{matches.length ? "No results" : "No sponsor profiles yet"}</Text><Text style={styles.emptyText}>{matches.length ? "Try a different search." : "Complete your organisation profile and check back as sponsors join."}</Text><TouchableOpacity style={styles.button} onPress={loadMatches}><Text style={styles.buttonText}>Refresh matches</Text></TouchableOpacity></View>
+            )}
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-
-    /* Header */
-    header: {
-        paddingHorizontal: 24,
-        paddingTop: 16,
-        paddingBottom: 20,
-    },
-    headerTitle: {
-        fontSize: 32,
-        fontWeight: "700",
-        color: COLORS.textPrimary,
-        letterSpacing: -0.5,
-    },
-
-    /* Search */
-    searchContainer: {
-        flexDirection: "row",
-        alignItems: "center",
-        height: 52,
-        marginHorizontal: 24,
-        marginBottom: 16,
-        paddingHorizontal: 18,
-        backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        borderRadius: 26, // fully rounded for a softer look
-        shadowColor: COLORS.textPrimary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.03,
-        shadowRadius: 8,
-        elevation: 1,
-    },
-    searchInput: {
-        flex: 1,
-        marginLeft: 12,
-        fontSize: 15,
-        color: COLORS.textPrimary,
-        paddingVertical: 0,
-    },
-
-    /* Empty state */
-    emptyState: {
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 40,
-        paddingBottom: 80, // give space for the larger bottom nav
-    },
-    emptyIconWrapper: {
-        width: 100,
-        height: 100,
-        borderRadius: 50, // perfect circle
-        backgroundColor: COLORS.primarySoft,
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 24,
-    },
-    emptyTitle: {
-        fontSize: 22,
-        fontWeight: "700",
-        color: COLORS.textPrimary,
-        marginBottom: 10,
-    },
-    emptySubtitle: {
-        fontSize: 15,
-        lineHeight: 24,
-        color: COLORS.textSecondary,
-        textAlign: "center",
-        marginBottom: 32,
-    },
-    refreshButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        height: 56,
-        paddingHorizontal: 32,
-        borderRadius: 28, // luxury pill shape
-        backgroundColor: COLORS.emerald, // pops beautifully against cream
-        shadowColor: COLORS.emerald,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.25,
-        shadowRadius: 12,
-        elevation: 6,
-    },
-    refreshButtonIcon: {
-        marginRight: 10,
-    },
-    refreshButtonText: {
-        color: COLORS.white,
-        fontSize: 16,
-        fontWeight: "700",
-        letterSpacing: 0.5,
-    },
+    safeArea: { flex: 1, backgroundColor: COLORS.background },
+    header: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18 },
+    title: { color: COLORS.text, fontSize: 29, fontWeight: "800", letterSpacing: -0.5 },
+    subtitle: { color: COLORS.muted, fontSize: 14, marginTop: 6 },
+    search: { flexDirection: "row", alignItems: "center", marginHorizontal: 20, marginBottom: 12, borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, paddingHorizontal: 15, height: 52 },
+    input: { flex: 1, marginLeft: 10, color: COLORS.text, fontSize: 15 },
+    list: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 130 },
+    card: { flexDirection: "row", alignItems: "center", padding: 15, backgroundColor: COLORS.surface, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, marginBottom: 12 },
+    score: { width: 54, height: 54, borderRadius: 27, backgroundColor: "#E8F5EE", justifyContent: "center", alignItems: "center", marginRight: 13 },
+    scoreText: { color: COLORS.primary, fontWeight: "800", fontSize: 14 },
+    info: { flex: 1, marginRight: 8 }, name: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
+    meta: { color: COLORS.muted, fontSize: 12, marginTop: 4 }, tags: { color: COLORS.muted, fontSize: 11, marginTop: 5 },
+    mutual: { color: COLORS.primary, fontSize: 11, fontWeight: "700", marginTop: 5 },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 36, paddingBottom: 60 },
+    emptyIcon: { width: 78, height: 78, borderRadius: 39, backgroundColor: "#E8F5EE", justifyContent: "center", alignItems: "center", marginBottom: 18 },
+    emptyTitle: { color: COLORS.text, fontSize: 19, fontWeight: "700", textAlign: "center" },
+    emptyText: { color: COLORS.muted, fontSize: 14, textAlign: "center", lineHeight: 21, marginTop: 8 },
+    button: { backgroundColor: COLORS.primary, borderRadius: 14, paddingHorizontal: 20, paddingVertical: 13, marginTop: 20 }, buttonText: { color: "#FFFFFF", fontWeight: "700" },
 });

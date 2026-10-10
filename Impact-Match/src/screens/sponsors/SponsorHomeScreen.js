@@ -17,9 +17,9 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 
-import projects from "../../data/projects";
 import { computeMatch } from "../../utils/matchScore";
 import { loadSponsorInterests, setSaved } from "../../utils/interests";
+import { readLocalCache, writeLocalCache } from "../../utils/profileCache";
 
 const COLORS = {
     background: "#F9FAFB",
@@ -43,18 +43,6 @@ const COLORS = {
 
 // A fixed palette to cycle through for NGO avatar backgrounds, since Firestore doesn't store one
 const AVATAR_COLORS = ["#10B981", "#2563EB", "#DB2777", "#7C3AED", "#C2410C", "#0EA5E9"];
-
-const recentActivity = [
-    {
-        id: "a1",
-        icon: "locate-outline",
-        iconBg: "#FCE7F3",
-        iconColor: "#DB2777",
-        text: "New NGOs matching your causes just joined",
-        time: "Recently",
-        unread: true,
-    },
-];
 
 function getGreeting() {
     const hour = new Date().getHours();
@@ -123,15 +111,18 @@ export default function SponsorHomeScreen({ navigation, route }) {
             const ngoQuery = query(collection(db, "users"), where("role", "==", "ngo"));
             const snapshot = await getDocs(ngoQuery);
 
-            const results = snapshot.docs.map((docSnap, index) => ({
+            const results = snapshot.docs.filter((docSnap) => docSnap.data().profileCompleted).map((docSnap, index) => ({
                 id: docSnap.id,
                 color: AVATAR_COLORS[index % AVATAR_COLORS.length],
-                ...docSnap.data(),
+                ...((({ organisationName, location, profileImageUrl, targetCommunity, mission, fundingRequired, profileCompleted, causes }) => ({ organisationName, location, profileImageUrl, targetCommunity, mission, fundingRequired, profileCompleted, causes }))(docSnap.data())),
             }));
 
             setNgos(results);
+            if (uid) await writeLocalCache(`sponsor-home-ngos:${uid}`, results);
         } catch (error) {
-            Alert.alert("Error Loading NGOs", error.message);
+            const cached = uid ? await readLocalCache(`sponsor-home-ngos:${uid}`) : null;
+            setNgos(cached || []);
+            if (!cached) Alert.alert("Error Loading NGOs", error.message);
         } finally {
             setLoading(false);
         }
@@ -266,11 +257,11 @@ export default function SponsorHomeScreen({ navigation, route }) {
                         <Text style={styles.statLabel}>Your Budget</Text>
                     </View>
 
-                    <View style={[styles.statCard, { backgroundColor: COLORS.statYellowBg }]}>
+                <View style={[styles.statCard, { backgroundColor: COLORS.statYellowBg }]}>
                         <Text style={[styles.statNumber, { color: COLORS.statYellowText }]}>
-                            {projects.length}
+                            {rankedNgos.filter((ngo) => computeMatch(sponsorProfile || {}, ngo).matchScore >= 60).length}
                         </Text>
-                        <Text style={styles.statLabel}>Projects</Text>
+                        <Text style={styles.statLabel}>Strong matches</Text>
                     </View>
 
                     <View style={[styles.statCard, { backgroundColor: COLORS.statPurpleBg }]}>
@@ -390,100 +381,26 @@ export default function SponsorHomeScreen({ navigation, route }) {
                     </View>
                 )}
 
-                {/* Projects You May Like */}
+                {/* More live NGO profiles */}
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Projects You May Like</Text>
+                    <Text style={styles.sectionTitle}>More organisations</Text>
                     <TouchableOpacity onPress={goToDiscover} activeOpacity={0.7}>
                         <Text style={styles.viewAll}>See All</Text>
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.projectsRow}
-                >
-                    {projects.map((project) => {
-                        const percentFunded = Math.min(
-                            100,
-                            Math.round((project.raised / project.goal) * 100)
-                        );
-
-                        return (
-                            <TouchableOpacity
-                                key={project.id}
-                                style={styles.projectCard}
-                                activeOpacity={0.85}
-                                onPress={() => goToDiscover()}
-                            >
-                                <View
-                                    style={[styles.projectImage, { backgroundColor: project.color }]}
-                                >
-                                    <Ionicons
-                                        name={project.icon}
-                                        size={30}
-                                        color="rgba(255,255,255,0.85)"
-                                    />
-
-                                    <View style={styles.projectCategoryPill}>
-                                        <Text style={styles.projectCategoryText}>
-                                            {project.category}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.projectBody}>
-                                    <Text style={styles.projectTitle} numberOfLines={2}>
-                                        {project.title}
-                                    </Text>
-                                    <Text style={styles.projectOrg} numberOfLines={1}>
-                                        {project.orgName}
-                                    </Text>
-
-                                    <View style={styles.progressTrack}>
-                                        <View
-                                            style={[styles.progressFill, { width: `${percentFunded}%` }]}
-                                        />
-                                    </View>
-
-                                    <View style={styles.progressLabelsRow}>
-                                        <Text style={styles.progressRaised}>
-                                            {formatCurrency(project.raised)} raised
-                                        </Text>
-                                        <Text style={styles.progressPercent}>
-                                            {percentFunded}% of {formatCurrency(project.goal)}
-                                        </Text>
-                                    </View>
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </ScrollView>
-
-                {/* Recent Activity */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Recent Activity</Text>
-                </View>
-
-                <View style={styles.activityList}>
-                    {recentActivity.map((item) => (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={[styles.activityRow, item.unread && styles.activityRowUnread]}
-                            activeOpacity={0.7}
-                        >
-                            <View style={[styles.activityIcon, { backgroundColor: item.iconBg }]}>
-                                <Ionicons name={item.icon} size={18} color={item.iconColor} />
+                <View style={styles.liveList}>
+                    {moreNgos.slice(0, 3).map((ngo) => (
+                        <TouchableOpacity key={ngo.id} style={styles.liveNgoCard} onPress={() => goToOpportunity(ngo)} activeOpacity={0.82}>
+                            <View style={[styles.liveAvatar, { backgroundColor: ngo.color }]}><Text style={styles.liveAvatarText}>{getInitials(ngo.organisationName)}</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.liveNgoName} numberOfLines={1}>{ngo.organisationName || "Organisation"}</Text>
+                                <Text style={styles.liveNgoMeta} numberOfLines={1}>{ngo.targetCommunity || "Community impact"} · {ngo.location || "Location not provided"}</Text>
                             </View>
-
-                            <View style={styles.activityContent}>
-                                <Text style={styles.activityText}>{item.text}</Text>
-                                <Text style={styles.activityTime}>{item.time}</Text>
-                            </View>
-
-                            {item.unread && <View style={styles.unreadDot} />}
+                            <Text style={styles.liveScore}>{computeMatch(sponsorProfile || {}, ngo).matchScore}%</Text>
                         </TouchableOpacity>
                     ))}
+                    {!loading && moreNgos.length === 0 && <Text style={styles.liveNgoMeta}>More real NGO profiles will appear here as they join.</Text>}
                 </View>
 
                 {/* All NGOs */}
@@ -763,6 +680,14 @@ const styles = StyleSheet.create({
     activityText: { fontSize: 13, fontWeight: "600", color: COLORS.textPrimary, lineHeight: 18, marginBottom: 3 },
     activityTime: { fontSize: 11, color: COLORS.textSecondary },
     unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
+
+    liveList: { marginBottom: 28 },
+    liveNgoCard: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 13, marginBottom: 9 },
+    liveAvatar: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", marginRight: 12 },
+    liveAvatarText: { color: COLORS.white, fontWeight: "800", fontSize: 13 },
+    liveNgoName: { color: COLORS.textPrimary, fontWeight: "700", fontSize: 14 },
+    liveNgoMeta: { color: COLORS.textSecondary, fontSize: 11, marginTop: 4 },
+    liveScore: { color: COLORS.primary, fontWeight: "800", fontSize: 13, marginLeft: 8 },
 
     ngoList: { gap: 4 },
     ngoRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },

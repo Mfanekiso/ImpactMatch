@@ -25,6 +25,8 @@ import SponsorMatchDetailsScreen from "../screens/sponsors/SponsorMatchDetailsSc
 import NewChat from "../screens/sponsors/NewChat";
 import ChatScreen from "../screens/sponsors/ChatScreen";
 import SponsorOpportunityDetailsScreen from "../screens/sponsors/SponsorOpportunityDetailsScreen";
+import CreateOpportunityScreen from "../screens/ngo/CreateOpportunityScreen";
+import useUnreadMessages from "../hooks/useUnreadMessages";
 
 // Initialize Navigators
 const Tab = createBottomTabNavigator();
@@ -47,18 +49,18 @@ const TAB_COLORS = {
 const tabStyles = StyleSheet.create({
     tabBar: {
         position: "absolute",
-        left: 20,
-        right: 20,
-        bottom: Platform.OS === "ios" ? 28 : 20,
-        height: 84,
-        borderRadius: 32,
+        left: 14,
+        right: 14,
+        bottom: Platform.OS === "ios" ? 18 : 12,
+        height: 70,
+        borderRadius: 24,
         backgroundColor: TAB_COLORS.background,
         borderTopWidth: 1,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: TAB_COLORS.gold,
-        paddingTop: 12,
-        paddingBottom: 12,
-        paddingHorizontal: 10,
+        paddingTop: 6,
+        paddingBottom: 7,
+        paddingHorizontal: 7,
         // Warm gold-tinted floating shadow
         ...Platform.select({
             web: {
@@ -91,9 +93,9 @@ const tabStyles = StyleSheet.create({
         marginBottom: 2,
     },
     iconWrap: {
-        width: 56,
-        height: 40,
-        borderRadius: 20,
+        width: 44,
+        height: 32,
+        borderRadius: 16,
         alignItems: "center",
         justifyContent: "center",
     },
@@ -113,6 +115,15 @@ const tabStyles = StyleSheet.create({
             },
         }),
     },
+    unreadBadge: {
+        backgroundColor: "#C2413A",
+        color: "#FFFFFF",
+        fontSize: 10,
+        fontWeight: "700",
+        minWidth: 18,
+        height: 18,
+        lineHeight: 18,
+    },
 });
 
 // ─── Reusable icon renderer ─────────────────────────────────────────────────
@@ -128,7 +139,8 @@ const renderTabIcon = (filledName, outlineName) =>
     );
 
 // 1. Create the Tab Navigator for post-login screens
-function MainTabs() {
+function MainTabs({ route }) {
+    const unreadCount = useUnreadMessages();
     return (
         <Tab.Navigator
             screenOptions={{
@@ -145,6 +157,7 @@ function MainTabs() {
             <Tab.Screen
                 name="Home"
                 component={NGOHomeScreen}
+                initialParams={route?.params?.params || route?.params}
                 options={{
                     tabBarLabel: "Home",
                     tabBarIcon: renderTabIcon("home", "home-outline"),
@@ -166,6 +179,8 @@ function MainTabs() {
                 component={MessagesScreen}
                 options={{
                     tabBarLabel: "Messages",
+                    tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+                    tabBarBadgeStyle: tabStyles.unreadBadge,
                     // Fixed: Changed from "chat" to standard Ionicons "chatbubbles"
                     tabBarIcon: renderTabIcon("chatbubbles", "chatbubbles-outline"),
                 }}
@@ -180,24 +195,16 @@ function MainTabs() {
                 }}
             />
 
-            <Tab.Screen
-                name="Profile"
-                component={NGOProfileScreen}
-                options={{
-                    tabBarLabel: "Profile",
-                    tabBarIcon: renderTabIcon("person-circle", "person-circle-outline"),
-                }}
-            />
         </Tab.Navigator>
     );
 }
 
 // 2. Main App Navigator
-export default function AppNavigator() {
+export default function AppNavigator({ initialRouteName = "Welcome", initialRouteParams }) {
     return (
         <NavigationContainer>
             <Stack.Navigator
-                initialRouteName="Welcome"
+                initialRouteName={initialRouteName}
                 screenOptions={{
                     headerShown: false,
                 }}
@@ -206,13 +213,16 @@ export default function AppNavigator() {
                 <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 <Stack.Screen name="Login" component={LoginScreen} />
                 <Stack.Screen name="SignUp" component={SignUpScreen} />
-                <Stack.Screen name="UserType" component={UserTypeScreen} />
-                <Stack.Screen name="NGOSetup" component={NGOSetupScreen} />
-                <Stack.Screen name="SponsorSetup" component={SponsorSetupScreen} />
+                <Stack.Screen name="UserType" component={UserTypeScreen} initialParams={initialRouteName === "UserType" ? initialRouteParams : undefined} />
+                <Stack.Screen name="NGOSetup" component={NGOSetupScreen} initialParams={initialRouteName === "NGOSetup" ? initialRouteParams : undefined} />
+                <Stack.Screen name="SponsorSetup" component={SponsorSetupScreen} initialParams={initialRouteName === "SponsorSetup" ? initialRouteParams : undefined} />
 
                 {/* The Main App (With Bottom Bar) */}
-                <Stack.Screen name="MainTabs" component={MainTabs} />
-                <Stack.Screen name="SponsorTabs" component={SponsorNavigator} />
+                <Stack.Screen name="MainTabs" component={MainTabs} initialParams={initialRouteName === "MainTabs" ? initialRouteParams : undefined} />
+                <Stack.Screen name="SponsorTabs" component={SponsorNavigator} initialParams={initialRouteName === "SponsorTabs" ? initialRouteParams : undefined} />
+                <Stack.Screen name="NGOProfile" component={NGOProfileScreen} />
+                <Stack.Screen name="CreateOpportunity" component={CreateOpportunityScreen} />
+                <Stack.Screen name="SponsorSearch" component={SponsorSearchScreen} />
 
                 {/* Detail Screens (cover the bottom bar when opened) */}
                 <Stack.Screen name="SponsorDetails" component={SponsorDetailsScreen} />

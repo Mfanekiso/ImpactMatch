@@ -28,6 +28,7 @@ const COLORS = {
 export default function SponsorMessagesScreen({ navigation }) {
     const [conversations, setConversations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const unreadTotal = conversations.reduce((total, item) => total + item.unreadCount, 0);
 
     useEffect(() => {
         const currentUser = auth.currentUser;
@@ -120,7 +121,7 @@ export default function SponsorMessagesScreen({ navigation }) {
     const renderConversation = ({ item }) => {
         return (
             <TouchableOpacity
-                style={styles.conversationRow}
+                style={[styles.conversationRow, item.unreadCount > 0 && styles.conversationRowUnread]}
                 activeOpacity={0.7}
                 onPress={() =>
                     navigation.navigate("Chat", {
@@ -138,20 +139,20 @@ export default function SponsorMessagesScreen({ navigation }) {
                 <View style={styles.conversationContent}>
                     <View style={styles.topRow}>
                         <Text
-                            style={styles.name}
+                            style={[styles.name, item.unreadCount > 0 && styles.unreadTextStrong]}
                             numberOfLines={1}
                         >
                             {item.name}
                         </Text>
 
-                        <Text style={styles.time}>
+                        <Text style={[styles.time, item.unreadCount > 0 && styles.unreadTime]}>
                             {formatTime(item.lastMessageAt)}
                         </Text>
                     </View>
 
                     <View style={styles.bottomRow}>
                         <Text
-                            style={styles.lastMessage}
+                            style={[styles.lastMessage, item.unreadCount > 0 && styles.lastMessageUnread]}
                             numberOfLines={1}
                         >
                             {item.lastMessage}
@@ -160,7 +161,7 @@ export default function SponsorMessagesScreen({ navigation }) {
                         {item.unreadCount > 0 && (
                             <View style={styles.unreadBadge}>
                                 <Text style={styles.unreadText}>
-                                    {item.unreadCount}
+                                    {item.unreadCount > 99 ? "99+" : item.unreadCount}
                                 </Text>
                             </View>
                         )}
@@ -196,9 +197,15 @@ export default function SponsorMessagesScreen({ navigation }) {
             <View style={styles.header}>
                 <View>
                     <Text style={styles.title}>Messages</Text>
-                    <Text style={styles.subtitle}>
-                        Connect with organisations
-                    </Text>
+                    <View style={styles.headerMeta}>
+                        <Text style={styles.subtitle}>Connect with organisations</Text>
+                        {unreadTotal > 0 && (
+                            <View style={styles.unreadSummary}>
+                                <View style={styles.unreadSummaryDot} />
+                                <Text style={styles.unreadSummaryText}>{unreadTotal} unread</Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
 
                 <TouchableOpacity
@@ -277,6 +284,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         borderBottomWidth: 1,
         borderBottomColor: COLORS.border,
+        backgroundColor: "#FFFFFF",
     },
 
     title: {
@@ -291,6 +299,11 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
     },
 
+    headerMeta: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 10, rowGap: 5 },
+    unreadSummary: { flexDirection: "row", alignItems: "center", paddingHorizontal: 9, paddingVertical: 4, borderRadius: 12, backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#C7F0DF" },
+    unreadSummaryDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginRight: 5 },
+    unreadSummaryText: { fontSize: 11, fontWeight: "700", color: "#047857" },
+
     newChatButton: {
         width: 44,
         height: 44,
@@ -301,16 +314,26 @@ const styles = StyleSheet.create({
     },
 
     listContent: {
-        paddingBottom: 20,
+        paddingHorizontal: 14,
+        paddingTop: 8,
+        paddingBottom: 24,
     },
 
     conversationRow: {
         flexDirection: "row",
         alignItems: "center",
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+        marginBottom: 9,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.white,
+    },
+
+    conversationRowUnread: {
+        borderColor: "#B7E8D3",
+        backgroundColor: "#FBFFFD",
     },
 
     avatar: {
@@ -367,13 +390,15 @@ const styles = StyleSheet.create({
     },
 
     unreadBadge: {
-        minWidth: 22,
-        height: 22,
-        borderRadius: 11,
+        minWidth: 23,
+        height: 23,
+        borderRadius: 12,
         paddingHorizontal: 6,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: COLORS.primary,
+        borderWidth: 2,
+        borderColor: "#EAF8F2",
     },
 
     unreadText: {
@@ -381,6 +406,9 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         color: COLORS.white,
     },
+    unreadTextStrong: { fontWeight: "700" },
+    unreadTime: { color: "#047857", fontWeight: "600" },
+    lastMessageUnread: { color: "#334155", fontWeight: "600" },
 
     emptyContainer: {
         flex: 1,

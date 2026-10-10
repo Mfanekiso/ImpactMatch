@@ -17,8 +17,8 @@ import {
 import Ionicons from '@react-native-vector-icons/ionicons';
 
 // Firebase imports
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "../../../Backend/firebaseConfig"; // Adjust path if needed
+import { cacheProfile } from "../../utils/profileCache";
+import { writeFirestoreOrQueue } from "../../utils/offlineWrites";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -62,8 +62,7 @@ export default function NGOSetupScreen({ route, navigation }) {
 
         try {
             // 3. Update the existing document in the "users" collection
-            const userRef = doc(db, "users", uid);
-            await updateDoc(userRef, {
+            const profile = {
                 role: role,
                 organisationName: organisationName,
                 mission: mission,
@@ -71,11 +70,14 @@ export default function NGOSetupScreen({ route, navigation }) {
                 fundingRequired: fundingRequired,
                 targetCommunity: targetCommunity,
                 profileCompleted: true // Helpful flag to know they finished setup
-            });
+            };
+            await writeFirestoreOrQueue("users", uid, profile);
+            await cacheProfile(uid, profile);
 
             // 4. Navigate to the main app once the database saves successfully
             navigation.navigate('MainTabs', {
-                screen: 'Home'
+                screen: 'Home',
+                params: { organisationName },
             });
 
         } catch (error) {

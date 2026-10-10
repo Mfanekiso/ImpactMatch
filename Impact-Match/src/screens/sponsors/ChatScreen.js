@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -19,10 +19,13 @@ import {
     query,
     orderBy,
     onSnapshot,
-    addDoc,
+    arrayUnion,
+    increment,
     serverTimestamp,
     doc,
+    getDoc,
     updateDoc,
+    writeBatch,
     deleteDoc,
 } from "firebase/firestore";
 
@@ -47,6 +50,8 @@ export default function ChatScreen({ navigation, route }) {
 
     const [editingMessageId, setEditingMessageId] = useState(null);
     const [editingText, setEditingText] = useState("");
+    const [otherUserId, setOtherUserId] = useState(null);
+    const markingRead = useRef(false);
 
     const currentUser = auth.currentUser;
 
@@ -54,6 +59,19 @@ export default function ChatScreen({ navigation, route }) {
         if (!conversationId) {
             return;
         }
+
+        const conversationRef = doc(db, "conversations", conversationId);
+        const unsubscribeConversation = onSnapshot(conversationRef, (snapshot) => {
+            if (!snapshot.exists() || !currentUser) return;
+            const data = snapshot.data();
+            const otherId = data.participants?.find((id) => id !== currentUser.uid) || null;
+            setOtherUserId(otherId);
+            if ((Number(data.unreadCount?.[currentUser.uid]) || 0) > 0) {
+                updateDoc(conversationRef, { [`unreadCount.${currentUser.uid}`]: 0 }).catch((error) => {
+                    console.log("Could not clear unread count:", error?.message);
+                });
+            }
+        });
 
         const messagesRef = collection(
             db,
@@ -76,13 +94,28 @@ export default function ChatScreen({ navigation, route }) {
                 }));
 
                 setMessages(messageList);
+                const unread = snapshot.docs.filter((document) => {
+                    const message = document.data();
+                    return message.senderId !== currentUser?.uid && !message.readBy?.includes(currentUser?.uid);
+                });
+                if (unread.length && !markingRead.current && currentUser) {
+                    markingRead.current = true;
+                    const batch = writeBatch(db);
+                    unread.forEach((messageDoc) => batch.update(messageDoc.ref, { readBy: arrayUnion(currentUser.uid) }));
+                    batch.commit().catch((error) => console.log("Could not mark messages read:", error?.message)).finally(() => {
+                        markingRead.current = false;
+                    });
+                }
             },
             (error) => {
                 console.log("Messages error:", error);
             }
         );
 
-        return unsubscribe;
+        return () => {
+            unsubscribe();
+            unsubscribeConversation();
+        };
     }, [conversationId]);
 
     const sendMessage = async () => {
@@ -93,29 +126,25 @@ export default function ChatScreen({ navigation, route }) {
         }
 
         try {
-            const messagesRef = collection(
-                db,
-                "conversations",
-                conversationId,
-                "messages"
-            );
-
-            await addDoc(messagesRef, {
+            const conversationRef = doc(db, "conversations", conversationId);
+            const conversationSnapshot = await getDoc(conversationRef);
+            const participants = conversationSnapshot.data()?.participants || [];
+            const recipientId = otherUserId || participants.find((id) => id !== currentUser.uid);
+            const messageRef = doc(collection(db, "conversations", conversationId, "messages"));
+            const batch = writeBatch(db);
+            batch.set(messageRef, {
                 senderId: currentUser.uid,
                 text: text,
                 createdAt: serverTimestamp(),
+                readBy: [currentUser.uid],
             });
-
-            const conversationRef = doc(
-                db,
-                "conversations",
-                conversationId
-            );
-
-            await updateDoc(conversationRef, {
+            const conversationUpdate = {
                 lastMessage: text,
                 lastMessageAt: serverTimestamp(),
-            });
+            };
+            if (recipientId) conversationUpdate[`unreadCount.${recipientId}`] = increment(1);
+            batch.update(conversationRef, conversationUpdate);
+            await batch.commit();
 
             setMessageText("");
         } catch (error) {
@@ -338,6 +367,7 @@ export default function ChatScreen({ navigation, route }) {
                                         item.createdAt
                                     )}
                                 </Text>
+                                {isMine && <Text style={[styles.readStatus, item.readBy?.includes(otherUserId) && styles.readStatusRead]}>{item.readBy?.includes(otherUserId) ? "Read" : "Sent"}</Text>}
                             </View>
                         </>
                     )}
@@ -520,6 +550,8 @@ const styles = StyleSheet.create({
     messageTime: {
         fontSize: 10,
     },
+    readStatus: { fontSize: 9, fontWeight: "700", color: "rgba(255,255,255,0.75)", marginTop: 2 },
+    readStatusRead: { color: "#D8F7E8" },
 
     myMessageTime: {
         color: "rgba(255, 255, 255, 0.75)",

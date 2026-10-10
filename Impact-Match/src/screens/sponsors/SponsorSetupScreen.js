@@ -17,10 +17,10 @@ import {
 import Ionicons from '@react-native-vector-icons/ionicons';
 
 // Firebase imports
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "../../../Backend/firebaseConfig"; // Adjust path if needed
 import CauseChips from "../../components/sponsors/CauseChips";
 import { parseAmount } from "../../utils/matchScore";
+import { cacheProfile } from "../../utils/profileCache";
+import { writeFirestoreOrQueue } from "../../utils/offlineWrites";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -78,8 +78,7 @@ export default function SponsorSetupScreen({ route, navigation }) {
         setSaving(true);
         try {
             // 3. Update the existing document in the "users" collection
-            const userRef = doc(db, "users", uid);
-            await updateDoc(userRef, {
+            const profile = {
                 role: role,
                 organisationName: organisationName,
                 industry: industry,
@@ -87,11 +86,14 @@ export default function SponsorSetupScreen({ route, navigation }) {
                 fundingBudget: budgetNumber,
                 preferredCauses: preferredCauses,
                 profileCompleted: true // Flag to indicate profile setup is done
-            });
+            };
+            await writeFirestoreOrQueue("users", uid, profile);
+            await cacheProfile(uid, profile);
 
             // 4. Navigate to the Sponsor home screen
             navigation.navigate('SponsorTabs', {
-                screen: 'Home'
+                screen: 'Home',
+                params: { organisationName },
             });
 
         } catch (error) {

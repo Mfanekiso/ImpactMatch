@@ -17,6 +17,7 @@ import {
     doc,
     setDoc,
     getDoc,
+    updateDoc,
     serverTimestamp,
 } from "firebase/firestore";
 
@@ -159,26 +160,29 @@ export default function NewChat({ navigation }) {
 
             const otherUserName = getUserName(otherUser);
 
-            await setDoc(
-                conversationRef,
-                {
+            const participantDetails = {
+                [currentUserId]: {
+                    name: currentUserName,
+                    role: currentUserData.role,
+                },
+                [otherUserId]: {
+                    name: otherUserName,
+                    role: otherUser.role,
+                },
+            };
+            const existingConversation = await getDoc(conversationRef);
+            if (existingConversation.exists()) {
+                await updateDoc(conversationRef, {
+                    [`participantDetails.${currentUserId}`]: participantDetails[currentUserId],
+                    [`participantDetails.${otherUserId}`]: participantDetails[otherUserId],
+                });
+            } else {
+                await setDoc(conversationRef, {
                     participants: [
                         currentUserId,
                         otherUserId,
                     ],
-
-                    participantDetails: {
-                        [currentUserId]: {
-                            name: currentUserName,
-                            role: currentUserData.role,
-                        },
-
-                        [otherUserId]: {
-                            name: otherUserName,
-                            role: otherUser.role,
-                        },
-                    },
-
+                    participantDetails,
                     lastMessage: "",
                     lastMessageAt: null,
 
@@ -188,11 +192,8 @@ export default function NewChat({ navigation }) {
                     },
 
                     createdAt: serverTimestamp(),
-                },
-                {
-                    merge: true,
-                }
-            );
+                });
+            }
 
             navigation.navigate("Chat", {
                 conversationId,

@@ -88,17 +88,15 @@ export default function SignUpScreen({ navigation }) {
             const user = userCredentials.user;
             const uid = user.uid;
             
-                        navigation.navigate("UserType", {
-                            uid: uid,
-                        });
-
-            console.log("Firebase account created");
-            console.log("User UID:", uid);
-
             await setDoc(doc(db, "users", uid), {
                 full_name: name.trim(),
                 email: email.trim(),
             });
+
+            navigation.navigate("UserType", { uid });
+
+            console.log("Firebase account created");
+            console.log("User UID:", uid);
 
             console.log("User saved to Firestore");
 

@@ -10,6 +10,9 @@ import {
     StatusBar,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import { auth } from "../../../Backend/firebaseConfig";
+import { interestDocId } from "../../utils/interests";
+import { writeFirestoreOrQueue } from "../../utils/offlineWrites";
 import {
     useFonts,
     Manrope_400Regular,
@@ -51,18 +54,25 @@ export default function SponsorDetailsScreen({ route, navigation }) {
 
     const { sponsor } = route.params || {};
 
-    const handleShortlist = () => {
-        Alert.alert(
-            "Sponsor Shortlisted",
-            `${sponsor?.name} has been added to your shortlist.`
-        );
-    };
-
-    const handleInterest = () => {
-        Alert.alert(
-            "Interest Sent",
-            `Your interest has been sent to ${sponsor?.name}.`
-        );
+    const handleInterest = async () => {
+        const ngoId = route.params?.ngoId || auth.currentUser?.uid;
+        if (!ngoId || !sponsor?.id) {
+            Alert.alert("Unable to send interest", "Please sign in and try again.");
+            return;
+        }
+        try {
+            const result = await writeFirestoreOrQueue("interests", interestDocId(sponsor.id, ngoId), {
+                sponsorId: sponsor.id,
+                ngoId,
+                ngoInterested: true,
+                updatedAt: new Date().toISOString(),
+            });
+            Alert.alert(result.queued ? "Saved offline" : "Interest sent", result.queued
+                ? `Your interest for ${sponsor.name} will sync when you’re back online.`
+                : `Your interest has been sent to ${sponsor.name}.`);
+        } catch (error) {
+            Alert.alert("Could not send interest", error.message || "Please try again.");
+        }
     };
 
     // Safely fallback if data is missing or fonts aren't loaded
@@ -171,14 +181,6 @@ export default function SponsorDetailsScreen({ route, navigation }) {
                         <Ionicons name="send" size={18} color={COLORS.white} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.shortlistButton}
-                        activeOpacity={0.85}
-                        onPress={handleShortlist}
-                    >
-                        <Ionicons name="heart-outline" size={20} color={COLORS.textPrimary} style={styles.shortlistIcon} />
-                        <Text style={styles.shortlistButtonText}>Save to Shortlist</Text>
-                    </TouchableOpacity>
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -407,23 +409,5 @@ const styles = StyleSheet.create({
         fontSize: 16,
         marginRight: 8,
         letterSpacing: 0.5,
-    },
-    shortlistButton: {
-        flexDirection: "row",
-        backgroundColor: COLORS.surface,
-        borderWidth: 1.5,
-        borderColor: COLORS.border,
-        paddingVertical: 18,
-        borderRadius: 20,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    shortlistIcon: {
-        marginRight: 8,
-    },
-    shortlistButtonText: {
-        fontFamily: "Manrope_600SemiBold",
-        color: COLORS.textPrimary,
-        fontSize: 16,
     },
 });

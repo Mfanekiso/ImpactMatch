@@ -8,23 +8,21 @@
 //   saved          boolean  sponsor tapped the heart
 //   interested     boolean  sponsor pressed "Express Interest"
 //   ngoInterested  boolean  (written by the NGO side, optional) NGO is interested in the sponsor
-//   updatedAt      timestamp
+//   updatedAt      ISO timestamp string
 //
 // "Mutual" = interested && ngoInterested.
 // The NGO side can switch Mutual on by setting `ngoInterested: true` on the SAME doc
-// (use setDoc(..., { merge: true }) and include sponsorId + ngoId).
+// (the shared write helper merges sponsorId + ngoId into the document).
 
 import {
     collection,
     query,
     where,
     getDocs,
-    doc,
-    setDoc,
-    serverTimestamp,
 } from "firebase/firestore";
 
 import { auth, db } from "../../Backend/firebaseConfig";
+import { writeFirestoreOrQueue } from "./offlineWrites";
 
 export const interestDocId = (sponsorId, ngoId) => `${sponsorId}_${ngoId}`;
 
@@ -59,16 +57,12 @@ export async function updateInterest(ngoId, changes) {
     if (!sponsorId) throw new Error("Please log in again.");
     if (!ngoId) throw new Error("Missing organisation id.");
 
-    await setDoc(
-        doc(db, "interests", interestDocId(sponsorId, ngoId)),
-        {
+    await writeFirestoreOrQueue("interests", interestDocId(sponsorId, ngoId), {
             sponsorId,
             ngoId,
             ...changes,
-            updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-    );
+            updatedAt: new Date().toISOString(),
+        });
 }
 
 export const setSaved = (ngoId, saved) => updateInterest(ngoId, { saved: !!saved });

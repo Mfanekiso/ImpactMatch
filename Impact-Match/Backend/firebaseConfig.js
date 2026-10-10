@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore"; 
+import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -16,5 +18,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // we will use this along the app for storing and accessing our database
-export const auth = getAuth(app);
+// Firebase Auth otherwise uses in-memory persistence in React Native. Keep the
+// signed-in session in device storage; the browser SDK manages web persistence.
+export const auth = Platform.OS === "web"
+  ? getAuth(app)
+  : initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });
 export const db = getFirestore(app);

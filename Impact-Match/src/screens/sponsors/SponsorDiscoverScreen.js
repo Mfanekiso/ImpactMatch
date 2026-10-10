@@ -13,61 +13,12 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import Ionicons from "@react-native-vector-icons/ionicons";
 
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { loadSponsorInterests, setSaved, setInterested } from "../../utils/interests";
-
-// ======================================================
-// MOCK PROJECT DATA
-// Keep this for now because the projects collection
-// has not been connected to Firebase yet.
-// ======================================================
-
-const PROJECTS_DATA = [
-  {
-    id: "proj-1",
-    title: "Digital Learning Centre — Phase 3",
-    orgName: "Education For All",
-    location: "Soweto, Johannesburg",
-    match: "92%",
-    verified: true,
-    cause: "Education",
-    description:
-      "Opening 4 new digital learning hubs in Soweto, equipping 3,200 additional learners with devices, internet access and certified digital literacy training.",
-    raised: "R180,000",
-    goal: "R300,000",
-    remaining: "R120,000",
-    percent: "60%",
-    progressRatio: 0.6,
-    image:
-      "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=800&auto=format&fit=crop",
-    beneficiaries: "3,200 people",
-    deadline: "31 Oct 2026",
-    interestedSponsors: 5,
-  },
-  {
-    id: "proj-2",
-    title: "Cape Fynbos Restoration Project",
-    orgName: "GreenRoots Africa",
-    location: "Cape Town, Western Cape",
-    match: "87%",
-    verified: true,
-    cause: "Environment",
-    description:
-      "Restoring 50 hectares of indigenous flora while employing local youth in conservation teams.",
-    raised: "R150,000",
-    goal: "R250,000",
-    remaining: "R100,000",
-    percent: "60%",
-    progressRatio: 0.6,
-    image:
-      "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=800&auto=format&fit=crop",
-    beneficiaries: "1,500 people",
-    deadline: "15 Dec 2026",
-    interestedSponsors: 3,
-  },
-];
+import { startConversationWithNgo } from "../../utils/startConversation";
 
 // ======================================================
 // HELPERS
@@ -97,7 +48,7 @@ function getInitials(name) {
 // MAIN SCREEN
 // ======================================================
 
-export default function SponsorDiscoverScreen() {
+export default function SponsorDiscoverScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState("Organisations");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -108,6 +59,8 @@ export default function SponsorDiscoverScreen() {
 
   // Firebase NGO data
   const [ngos, setNgos] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   // Filter state
@@ -186,6 +139,34 @@ export default function SponsorDiscoverScreen() {
     fetchNgos();
   }, []);
 
+  useEffect(() => {
+    const projectsQuery = query(collection(db, "projects"), where("status", "==", "open"));
+    return onSnapshot(projectsQuery, (snapshot) => {
+      const rows = snapshot.docs.map((projectDoc) => {
+        const project = projectDoc.data();
+        return {
+          id: projectDoc.id,
+          ...project,
+          title: project.title || "Untitled project",
+          orgName: project.orgName || "Community organisation",
+          cause: project.cause || "Community impact",
+          location: project.location || "Location not specified",
+          description: project.description || "",
+          fundingGoal: Number(project.fundingGoal) || 0,
+          beneficiaries: project.beneficiaries || "Not specified",
+          deadline: project.deadline || "Not specified",
+          verified: !!project.ownerVerified,
+          image: project.imageUrl || null,
+        };
+      }).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      setProjects(rows);
+      setProjectsLoading(false);
+    }, (error) => {
+      console.warn("Could not load projects:", error?.message);
+      setProjectsLoading(false);
+    });
+  }, []);
+
   // ====================================================
   // FAVORITES
   // ====================================================
@@ -217,7 +198,7 @@ export default function SponsorDiscoverScreen() {
       [id]: next,
     }));
 
-    // Only real NGOs are saved to Firestore (mock projects stay local)
+    // Organisation bookmarks use the existing interests collection; project hearts stay local.
     if (!ngos.some((ngo) => ngo.id === id)) return;
 
     try {
@@ -248,6 +229,14 @@ export default function SponsorDiscoverScreen() {
       }));
       Alert.alert("Could not update interest", error?.message || "Please try again.");
     }
+  };
+
+  const contactProjectOrganisation = async (project) => {
+    setSelectedProject(null);
+    await startConversationWithNgo(navigation, {
+      id: project.ownerId,
+      organisationName: project.orgName,
+    });
   };
 
   // ====================================================
@@ -303,7 +292,7 @@ export default function SponsorDiscoverScreen() {
   const filteredProjects = useMemo(() => {
     const search = searchQuery.toLowerCase().trim();
 
-    return PROJECTS_DATA.filter((project) => {
+    return projects.filter((project) => {
       const matchesSearch =
         project.title.toLowerCase().includes(search) ||
         project.description.toLowerCase().includes(search) ||
@@ -332,6 +321,7 @@ export default function SponsorDiscoverScreen() {
       );
     });
   }, [
+    projects,
     searchQuery,
     selectedCause,
     selectedLocation,
@@ -662,13 +652,14 @@ export default function SponsorDiscoverScreen() {
             ========================================== */}
 
             {activeTab === "Projects" && (
-
-              filteredProjects.length === 0 ? (
+              projectsLoading ? (
+                <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#227B53" /></View>
+              ) : filteredProjects.length === 0 ? (
 
                 <View style={styles.emptyState}>
 
                   <Text style={styles.emptyStateText}>
-                    No projects match your search or filters.
+                    {projects.length === 0 ? "No projects have been published yet." : "No projects match your search or filters."}
                   </Text>
 
                 </View>
@@ -690,12 +681,13 @@ export default function SponsorDiscoverScreen() {
                       }
                     >
 
-                      <Image
-                        source={{
-                          uri: project.image,
-                        }}
-                        style={styles.projectImage}
-                      />
+                      {project.image ? (
+                        <Image source={{ uri: project.image }} style={styles.projectImage} />
+                      ) : (
+                        <View style={[styles.projectImage, styles.projectImagePlaceholder]}>
+                          <Ionicons name="leaf-outline" size={34} color="#FFFFFF" />
+                        </View>
+                      )}
 
                       <View
                         style={styles.projectImageChip}
@@ -710,22 +702,6 @@ export default function SponsorDiscoverScreen() {
                             style={styles.chipBlueText}
                           >
                             {project.cause}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View
-                        style={styles.projectMatchBadge}
-                      >
-                        <View
-                          style={[
-                            styles.matchBadge,
-                          ]}
-                        >
-                          <Text
-                            style={styles.matchBadgeText}
-                          >
-                            • {project.match}
                           </Text>
                         </View>
                       </View>
@@ -754,51 +730,9 @@ export default function SponsorDiscoverScreen() {
                       {project.description}
                     </Text>
 
-                    {/* PROGRESS */}
-
-                    <View
-                      style={
-                        styles.progressBarContainer
-                      }
-                    >
-
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          {
-                            width: `${
-                              project.progressRatio * 100
-                            }%`,
-                          },
-                        ]}
-                      />
-
-                    </View>
-
-                    <View
-                      style={
-                        styles.progressLabelRow
-                      }
-                    >
-
-                      <Text
-                        style={
-                          styles.progressTextGreen
-                        }
-                      >
-                        {project.raised} raised
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.progressTextGray
-                        }
-                      >
-                        {project.percent} of{" "}
-                        {project.goal}
-                      </Text>
-
-                    </View>
+                    <Text style={styles.projectFundingTarget}>
+                      Funding target: R{Number(project.fundingGoal || 0).toLocaleString("en-ZA")}
+                    </Text>
 
                     {/* ACTIONS */}
 
@@ -1383,15 +1317,7 @@ export default function SponsorDiscoverScreen() {
                     Project Details
                   </Text>
 
-                  <View
-                    style={styles.matchBadge}
-                  >
-                    <Text
-                      style={styles.matchBadgeText}
-                    >
-                      • {selectedProject.match}
-                    </Text>
-                  </View>
+                  <View style={styles.projectTypeBadge}><Text style={styles.projectTypeBadgeText}>Project</Text></View>
 
                 </View>
 
@@ -1403,15 +1329,13 @@ export default function SponsorDiscoverScreen() {
                   }
                 >
 
-                  <Image
-                    source={{
-                      uri:
-                        selectedProject.image,
-                    }}
-                    style={
-                      styles.projectDetailImage
-                    }
-                  />
+                  {selectedProject.image ? (
+                    <Image source={{ uri: selectedProject.image }} style={styles.projectDetailImage} />
+                  ) : (
+                    <View style={[styles.projectDetailImage, styles.projectImagePlaceholder]}>
+                      <Ionicons name="leaf-outline" size={42} color="#FFFFFF" />
+                    </View>
+                  )}
 
                   <View
                     style={
@@ -1447,8 +1371,7 @@ export default function SponsorDiscoverScreen() {
                         styles.projectDetailBannerSub
                       }
                     >
-                      {selectedProject.orgName} ✓
-                      Verified
+                      {selectedProject.orgName}{selectedProject.verified ? " · Verified organisation" : ""}
                     </Text>
 
                   </View>
@@ -1461,111 +1384,11 @@ export default function SponsorDiscoverScreen() {
                   style={styles.detailContent}
                 >
 
-                  {/* FUNDING CARD */}
-
-                  <View
-                    style={styles.fundingCard}
-                  >
-
-                    <View
-                      style={styles.fundingRow}
-                    >
-
-                      <View>
-                        <Text
-                          style={
-                            styles.fundingStatGreen
-                          }
-                        >
-                          {selectedProject.raised}
-                        </Text>
-
-                        <Text
-                          style={styles.statLabel}
-                        >
-                          Raised
-                        </Text>
-                      </View>
-
-                      <View>
-                        <Text
-                          style={
-                            styles.fundingStatBold
-                          }
-                        >
-                          {selectedProject.goal}
-                        </Text>
-
-                        <Text
-                          style={styles.statLabel}
-                        >
-                          Goal
-                        </Text>
-                      </View>
-
-                      <View>
-                        <Text
-                          style={
-                            styles.fundingStatRed
-                          }
-                        >
-                          {selectedProject.remaining}
-                        </Text>
-
-                        <Text
-                          style={styles.statLabel}
-                        >
-                          Remaining
-                        </Text>
-                      </View>
-
-                    </View>
-
-                    <View
-                      style={
-                        styles.progressBarContainer
-                      }
-                    >
-
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          {
-                            width: `${
-                              selectedProject.progressRatio *
-                              100
-                            }%`,
-                          },
-                        ]}
-                      />
-
-                    </View>
-
-                    <View
-                      style={
-                        styles.progressLabelRow
-                      }
-                    >
-
-                      <Text
-                        style={
-                          styles.progressTextGreen
-                        }
-                      >
-                        {selectedProject.raised} raised
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.progressTextGray
-                        }
-                      >
-                        {selectedProject.percent} of{" "}
-                        {selectedProject.goal}
-                      </Text>
-
-                    </View>
-
+                  <View style={styles.fundingCard}>
+                    <Text style={styles.fundingStatGreen}>
+                      R{Number(selectedProject.fundingGoal || 0).toLocaleString("en-ZA")}
+                    </Text>
+                    <Text style={styles.statLabel}>Funding target</Text>
                   </View>
 
                   {/* OVERVIEW */}
@@ -1646,27 +1469,7 @@ export default function SponsorDiscoverScreen() {
                       </Text>
                     </View>
 
-                    <View
-                      style={styles.infoTableRow}
-                    >
-                      <Text
-                        style={
-                          styles.infoTableLabel
-                        }
-                      >
-                        Interested Sponsors
-                      </Text>
 
-                      <Text
-                        style={
-                          styles.infoTableValue
-                        }
-                      >
-                        {
-                          selectedProject.interestedSponsors
-                        }
-                      </Text>
-                    </View>
 
                   </View>
 
@@ -1677,32 +1480,18 @@ export default function SponsorDiscoverScreen() {
                   >
 
                     <TouchableOpacity
-                      style={
-                        styles.contactNgoButton
-                      }
+                      style={styles.contactNgoButton}
+                      onPress={() => contactProjectOrganisation(selectedProject)}
                     >
                       <Text
                         style={
                           styles.contactNgoText
                         }
                       >
-                        Contact NGO
+                        Contact organisation
                       </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={
-                        styles.sponsorProjectButton
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.primaryButtonText
-                        }
-                      >
-                        Sponsor This Project
-                      </Text>
-                    </TouchableOpacity>
 
                   </View>
 
@@ -2088,6 +1877,10 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
+  projectImagePlaceholder: { backgroundColor: "#2A9D8F", alignItems: "center", justifyContent: "center" },
+  projectFundingTarget: { fontSize: 13, fontWeight: "700", color: "#227B53", marginTop: 4, marginBottom: 10 },
+  projectTypeBadge: { backgroundColor: "#E8F5EE", borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 },
+  projectTypeBadgeText: { fontSize: 11, fontWeight: "700", color: "#227B53" },
 
   projectImageChip: {
     position: "absolute",

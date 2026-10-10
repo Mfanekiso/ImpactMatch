@@ -62,13 +62,18 @@ export default function MessagesScreen({ navigation }) {
                         name: otherUser?.name || "Unknown User",
                         role: otherUser?.role || "",
                         lastMessage: data.lastMessage || "No messages yet",
+                        lastMessageAt: data.lastMessageAt || null,
                         time: data.lastMessageAt ? formatTime(data.lastMessageAt) : "",
                         unreadCount: data.unreadCount?.[currentUser.uid] || 0,
                     };
                 });
 
                 // Newest conversation first
-                conversationList.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
+                conversationList.sort((a, b) => {
+                    const timeA = a.lastMessageAt?.toMillis ? a.lastMessageAt.toMillis() : 0;
+                    const timeB = b.lastMessageAt?.toMillis ? b.lastMessageAt.toMillis() : 0;
+                    return timeB - timeA;
+                });
                 setConversations(conversationList);
                 setLoading(false);
             },
