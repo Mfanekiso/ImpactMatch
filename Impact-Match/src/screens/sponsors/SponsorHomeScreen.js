@@ -481,7 +481,7 @@ export default function SponsorHomeScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.background },
     centered: { justifyContent: "center", alignItems: "center" },
-    scrollContent: { padding: 20, paddingTop: 10, paddingBottom: 40 },
+    scrollContent: { padding: 20, paddingTop: 10, paddingBottom: 112 },
 
     header: {
         flexDirection: "row",

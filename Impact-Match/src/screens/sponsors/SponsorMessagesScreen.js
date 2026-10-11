@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     listContent: {
         paddingHorizontal: 14,
         paddingTop: 8,
-        paddingBottom: 24,
+        paddingBottom: 112,
     },
 
     conversationRow: {

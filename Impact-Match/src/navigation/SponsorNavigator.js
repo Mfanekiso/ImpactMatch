@@ -1,5 +1,5 @@
 import React from "react";
-import { Platform, StyleSheet } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Ionicons from "@react-native-vector-icons/ionicons";
 
@@ -16,10 +16,17 @@ const Tab = createBottomTabNavigator();
 const TAB_ICONS = {
     Home: ["home", "home-outline"],
     Discover: ["compass", "compass-outline"],
-    Matches: ["heart", "heart-outline"],
-    Messages: ["chatbubble", "chatbubble-outline"],
+    Matches: ["people", "people-outline"],
+    Messages: ["chatbubbles", "chatbubbles-outline"],
     Impact: ["analytics", "analytics-outline"],
-    Profile: ["person-circle", "person-circle-outline"],
+};
+
+const COLORS = {
+    background: "#FFFFFF",
+    border: "#DCEFE6",
+    active: "#087A55",
+    inactive: "#8A9A92",
+    activeWash: "#E8F6EF",
 };
 
 // Bottom tab bar for the Sponsor experience. Mirrors the structure of
@@ -31,15 +38,18 @@ export default function SponsorNavigator({ route }) {
         <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarActiveTintColor: "#10B981",
-                tabBarInactiveTintColor: "#94A3B8",
+                tabBarActiveTintColor: COLORS.active,
+                tabBarInactiveTintColor: COLORS.inactive,
                 tabBarStyle: styles.tabBar,
                 tabBarLabelStyle: styles.tabLabel,
                 tabBarItemStyle: styles.tabItem,
                 tabBarShowLabel: true,
                 tabBarHideOnKeyboard: true,
+                tabBarBackground: () => <View style={styles.tabBarBackground} />,
                 tabBarIcon: ({ color, focused }) => (
-                    <Ionicons name={TAB_ICONS[route.name][focused ? 0 : 1]} size={21} color={color} />
+                    <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+                        <Ionicons name={TAB_ICONS[route.name][focused ? 0 : 1]} size={24} color={focused ? COLORS.active : color} />
+                    </View>
                 ),
             })}
         >
@@ -48,27 +58,51 @@ export default function SponsorNavigator({ route }) {
             <Tab.Screen name="Matches" component={SponsorMatchesScreen} />
             <Tab.Screen name="Messages" component={SponsorMessagesScreen} options={{ tabBarBadge: unreadCount > 0 ? unreadCount : undefined, tabBarBadgeStyle: styles.unreadBadge }} />
             <Tab.Screen name="Impact" component={SponsorImpactScreen} />
-            <Tab.Screen name="Profile" component={SponsorProfileScreen} />
+            <Tab.Screen
+                name="Profile"
+                component={SponsorProfileScreen}
+                options={{ tabBarButton: () => null }}
+            />
         </Tab.Navigator>
     );
 }
 
 const styles = StyleSheet.create({
     tabBar: {
-        height: Platform.OS === "ios" ? 76 : 66,
-        paddingTop: 5,
-        paddingBottom: Platform.OS === "ios" ? 17 : 5,
-        paddingHorizontal: 3,
+        position: "absolute",
+        left: 14,
+        right: 14,
+        bottom: Platform.OS === "ios" ? 18 : 12,
+        height: 70,
+        borderRadius: 24,
+        backgroundColor: COLORS.background,
         borderTopWidth: 1,
-        borderTopColor: "#E6EEE9",
-        backgroundColor: "#FFFFFF",
-        elevation: 12,
-        shadowColor: "#0F172A",
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.07,
-        shadowRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        paddingTop: 6,
+        paddingBottom: 7,
+        paddingHorizontal: 7,
+        ...Platform.select({
+            web: { boxShadow: "0px 16px 40px rgba(15, 23, 42, 0.13), 0px 4px 12px rgba(16, 185, 129, 0.16)" },
+            default: {
+                shadowColor: "#0F172A",
+                shadowOffset: { width: 0, height: 14 },
+                shadowOpacity: 0.13,
+                shadowRadius: 26,
+                elevation: 15,
+            },
+        }),
     },
-    tabItem: { flex: 1, minWidth: 0, paddingHorizontal: 0 },
-    tabLabel: { fontSize: 9, fontWeight: "600", marginTop: 1, letterSpacing: 0.1 },
-    unreadBadge: { backgroundColor: "#C2413A", color: "#FFFFFF", fontSize: 9, fontWeight: "700", minWidth: 18, height: 18, lineHeight: 18, borderRadius: 9 },
+    tabBarBackground: { flex: 1, borderRadius: 24, backgroundColor: COLORS.background },
+    tabItem: { borderRadius: 20, marginHorizontal: 4, paddingVertical: 4 },
+    tabLabel: { fontSize: 10, fontWeight: "600", letterSpacing: 0.35, marginTop: 3, marginBottom: 1 },
+    iconWrap: { width: 44, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+    iconWrapActive: {
+        backgroundColor: COLORS.activeWash,
+        ...Platform.select({
+            web: { boxShadow: "0px 4px 14px rgba(16, 185, 129, 0.22)" },
+            default: { shadowColor: "#10B981", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 9, elevation: 4 },
+        }),
+    },
+    unreadBadge: { backgroundColor: "#C2413A", color: "#FFFFFF", fontSize: 10, fontWeight: "700", minWidth: 18, height: 18, lineHeight: 18, borderRadius: 9 },
 });

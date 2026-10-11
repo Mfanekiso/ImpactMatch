@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     },
     listContent: {
         paddingHorizontal: 20,
-        paddingBottom: 40,
+        paddingBottom: 112,
         gap: 12,
     },
     emptyText: {

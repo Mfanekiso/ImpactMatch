@@ -366,7 +366,7 @@ export default function ImpactDashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
   container: { flex: 1, backgroundColor: "#F8FAFC" },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 112 },
 
   /* Header */
   headerContainer: { marginBottom: 16 },
