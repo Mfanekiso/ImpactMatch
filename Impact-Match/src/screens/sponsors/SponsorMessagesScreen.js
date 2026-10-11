@@ -12,20 +12,46 @@ import {
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
+// ─── LUXURY COLOR PALETTE (Sponsor Twist) ──────────────────────────────
 const COLORS = {
-    background: "#FFFFFF",
-    surface: "#F9FAFB",
-    border: "#E5E7EB",
-    primary: "#10B981",
-    primaryLight: "rgba(16, 185, 129, 0.10)",
-    textPrimary: "#0F172A",
-    textSecondary: "#64748B",
-    placeholder: "#94A3B8",
+    background: "#F8F6EE",       // Cream base
+    surface: "#FFFFFF",          // Clean white
+    primary: "#D9C982",          // Soft Luxury Gold
+    primarySoft: "rgba(217, 201, 130, 0.2)",
+    emerald: "#059669",          // Vibrant Emerald for badges/unread
+    emeraldSoft: "rgba(5, 150, 105, 0.1)",
+    buttonDark: "#013e37",       // Deep luxury green
+    buttonDarkSoft: "rgba(1, 62, 55, 0.08)",
+    textPrimary: "#433327",      // Warm Bronze
+    textSecondary: "#8C7A6B",    // Muted taupe
+    border: "#E8DFD5",
     white: "#FFFFFF",
 };
 
+const softShadow = {
+    shadowColor: COLORS.textPrimary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+};
+
 export default function SponsorMessagesScreen({ navigation }) {
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
     const [conversations, setConversations] = useState([]);
     const [loading, setLoading] = useState(true);
     const unreadTotal = conversations.reduce((total, item) => total + item.unreadCount, 0);
@@ -119,9 +145,11 @@ export default function SponsorMessagesScreen({ navigation }) {
     };
 
     const renderConversation = ({ item }) => {
+        const isUnread = item.unreadCount > 0;
+
         return (
             <TouchableOpacity
-                style={[styles.conversationRow, item.unreadCount > 0 && styles.conversationRowUnread]}
+                style={[styles.conversationRow, isUnread && styles.conversationRowUnread]}
                 activeOpacity={0.7}
                 onPress={() =>
                     navigation.navigate("Chat", {
@@ -130,8 +158,8 @@ export default function SponsorMessagesScreen({ navigation }) {
                     })
                 }
             >
-                <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
+                <View style={[styles.avatar, isUnread && styles.avatarUnread]}>
+                    <Text style={[styles.avatarText, isUnread && styles.avatarTextUnread]}>
                         {item.name.charAt(0).toUpperCase()}
                     </Text>
                 </View>
@@ -139,26 +167,26 @@ export default function SponsorMessagesScreen({ navigation }) {
                 <View style={styles.conversationContent}>
                     <View style={styles.topRow}>
                         <Text
-                            style={[styles.name, item.unreadCount > 0 && styles.unreadTextStrong]}
+                            style={[styles.name, isUnread && styles.unreadTextStrong]}
                             numberOfLines={1}
                         >
                             {item.name}
                         </Text>
 
-                        <Text style={[styles.time, item.unreadCount > 0 && styles.unreadTime]}>
+                        <Text style={[styles.time, isUnread && styles.unreadTime]}>
                             {formatTime(item.lastMessageAt)}
                         </Text>
                     </View>
 
                     <View style={styles.bottomRow}>
                         <Text
-                            style={[styles.lastMessage, item.unreadCount > 0 && styles.lastMessageUnread]}
+                            style={[styles.lastMessage, isUnread && styles.lastMessageUnread]}
                             numberOfLines={1}
                         >
                             {item.lastMessage}
                         </Text>
 
-                        {item.unreadCount > 0 && (
+                        {isUnread && (
                             <View style={styles.unreadBadge}>
                                 <Text style={styles.unreadText}>
                                     {item.unreadCount > 99 ? "99+" : item.unreadCount}
@@ -171,17 +199,18 @@ export default function SponsorMessagesScreen({ navigation }) {
         );
     };
 
+    if (!fontsLoaded) return null;
+
     if (loading) {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar barStyle="dark-content" />
+                <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator
                         size="large"
-                        color={COLORS.primary}
+                        color={COLORS.buttonDark}
                     />
-
                     <Text style={styles.loadingText}>
                         Loading messages...
                     </Text>
@@ -192,7 +221,7 @@ export default function SponsorMessagesScreen({ navigation }) {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="dark-content" />
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
             <View style={styles.header}>
                 <View>
@@ -227,7 +256,7 @@ export default function SponsorMessagesScreen({ navigation }) {
                         <Ionicons
                             name="chatbubbles-outline"
                             size={42}
-                            color={COLORS.primary}
+                            color={COLORS.buttonDark}
                         />
                     </View>
 
@@ -250,7 +279,6 @@ export default function SponsorMessagesScreen({ navigation }) {
                             size={20}
                             color={COLORS.white}
                         />
-
                         <Text style={styles.startButtonText}>
                             Start a Conversation
                         </Text>
@@ -276,45 +304,70 @@ const styles = StyleSheet.create({
     },
 
     header: {
-        paddingHorizontal: 20,
+        paddingHorizontal: 24,
         paddingTop: 16,
-        paddingBottom: 18,
+        paddingBottom: 24,
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: COLORS.background,
     },
 
     title: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 28,
-        fontWeight: "700",
         color: COLORS.textPrimary,
+        letterSpacing: -0.5,
     },
 
     subtitle: {
         marginTop: 4,
+        fontFamily: "Manrope_500Medium",
         fontSize: 14,
         color: COLORS.textSecondary,
     },
 
-    headerMeta: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 10, rowGap: 5 },
-    unreadSummary: { flexDirection: "row", alignItems: "center", paddingHorizontal: 9, paddingVertical: 4, borderRadius: 12, backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#C7F0DF" },
-    unreadSummaryDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginRight: 5 },
-    unreadSummaryText: { fontSize: 11, fontWeight: "700", color: "#047857" },
+    headerMeta: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        flexWrap: "wrap", 
+        columnGap: 10, 
+        rowGap: 5 
+    },
+    unreadSummary: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        paddingHorizontal: 10, 
+        paddingVertical: 4, 
+        borderRadius: 12, 
+        backgroundColor: COLORS.emeraldSoft, 
+    },
+    unreadSummaryDot: { 
+        width: 6, 
+        height: 6, 
+        borderRadius: 3, 
+        backgroundColor: COLORS.emerald, 
+        marginRight: 6 
+    },
+    unreadSummaryText: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 11, 
+        color: COLORS.emerald,
+        textTransform: "uppercase"
+    },
 
     newChatButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: COLORS.primary,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: COLORS.buttonDark,
         alignItems: "center",
         justifyContent: "center",
+        ...softShadow,
     },
 
     listContent: {
-        paddingHorizontal: 14,
+        paddingHorizontal: 24,
         paddingTop: 8,
         paddingBottom: 112,
     },
@@ -322,34 +375,41 @@ const styles = StyleSheet.create({
     conversationRow: {
         flexDirection: "row",
         alignItems: "center",
-        paddingHorizontal: 14,
-        paddingVertical: 14,
-        marginBottom: 9,
-        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+        marginBottom: 12,
+        borderRadius: 20,
         borderWidth: 1,
         borderColor: COLORS.border,
-        backgroundColor: COLORS.white,
+        backgroundColor: COLORS.surface,
+        ...softShadow,
     },
 
     conversationRowUnread: {
-        borderColor: "#B7E8D3",
-        backgroundColor: "#FBFFFD",
+        borderColor: COLORS.primary,
+        backgroundColor: "#FFFCF5", // Very subtle warm tint
     },
 
     avatar: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: COLORS.primaryLight,
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        backgroundColor: COLORS.primarySoft,
         alignItems: "center",
         justifyContent: "center",
-        marginRight: 14,
+        marginRight: 16,
+    },
+    avatarUnread: {
+        backgroundColor: COLORS.buttonDarkSoft,
     },
 
     avatarText: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 20,
-        fontWeight: "700",
-        color: COLORS.primary,
+        color: COLORS.textPrimary,
+    },
+    avatarTextUnread: {
+        color: COLORS.buttonDark,
     },
 
     conversationContent: {
@@ -360,18 +420,19 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 6,
+        marginBottom: 4,
     },
 
     name: {
         flex: 1,
         marginRight: 10,
+        fontFamily: "Manrope_600SemiBold",
         fontSize: 16,
-        fontWeight: "600",
         color: COLORS.textPrimary,
     },
 
     time: {
+        fontFamily: "Manrope_500Medium",
         fontSize: 12,
         color: COLORS.textSecondary,
     },
@@ -385,30 +446,37 @@ const styles = StyleSheet.create({
     lastMessage: {
         flex: 1,
         marginRight: 10,
+        fontFamily: "Manrope_400Regular",
         fontSize: 14,
         color: COLORS.textSecondary,
     },
 
     unreadBadge: {
-        minWidth: 23,
-        height: 23,
+        minWidth: 24,
+        height: 24,
         borderRadius: 12,
         paddingHorizontal: 6,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: COLORS.primary,
-        borderWidth: 2,
-        borderColor: "#EAF8F2",
+        backgroundColor: COLORS.emerald,
     },
 
     unreadText: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 12,
-        fontWeight: "700",
         color: COLORS.white,
     },
-    unreadTextStrong: { fontWeight: "700" },
-    unreadTime: { color: "#047857", fontWeight: "600" },
-    lastMessageUnread: { color: "#334155", fontWeight: "600" },
+    unreadTextStrong: { 
+        fontFamily: "Manrope_700Bold",
+    },
+    unreadTime: { 
+        color: COLORS.emerald, 
+        fontFamily: "Manrope_700Bold",
+    },
+    lastMessageUnread: { 
+        color: COLORS.textPrimary, 
+        fontFamily: "Manrope_600SemiBold",
+    },
 
     emptyContainer: {
         flex: 1,
@@ -421,42 +489,45 @@ const styles = StyleSheet.create({
         width: 86,
         height: 86,
         borderRadius: 43,
-        backgroundColor: COLORS.primaryLight,
+        backgroundColor: COLORS.buttonDarkSoft,
         alignItems: "center",
         justifyContent: "center",
-        marginBottom: 20,
+        marginBottom: 24,
     },
 
     emptyTitle: {
-        fontSize: 21,
-        fontWeight: "700",
+        fontFamily: "Manrope_700Bold",
+        fontSize: 22,
         color: COLORS.textPrimary,
         marginBottom: 8,
     },
 
     emptyText: {
-        fontSize: 14,
-        lineHeight: 21,
+        fontFamily: "Manrope_500Medium",
+        fontSize: 15,
+        lineHeight: 24,
         textAlign: "center",
         color: COLORS.textSecondary,
-        marginBottom: 24,
+        marginBottom: 32,
     },
 
     startButton: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        paddingHorizontal: 20,
-        height: 48,
-        borderRadius: 12,
-        backgroundColor: COLORS.primary,
+        paddingHorizontal: 24,
+        height: 56,
+        borderRadius: 30, // Luxury pill shape
+        backgroundColor: COLORS.buttonDark,
+        ...softShadow,
     },
 
     startButtonText: {
         marginLeft: 8,
-        fontSize: 14,
-        fontWeight: "600",
+        fontFamily: "Manrope_700Bold",
+        fontSize: 15,
         color: COLORS.white,
+        letterSpacing: 0.3,
     },
 
     loadingContainer: {
@@ -466,7 +537,8 @@ const styles = StyleSheet.create({
     },
 
     loadingText: {
-        marginTop: 12,
+        marginTop: 16,
+        fontFamily: "Manrope_500Medium",
         fontSize: 14,
         color: COLORS.textSecondary,
     },

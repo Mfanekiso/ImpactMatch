@@ -10,6 +10,13 @@ import {
     ActivityIndicator,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
 import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 
@@ -18,29 +25,38 @@ import { computeMatch } from "../../utils/matchScore";
 import { loadSponsorInterests, getMatchStatus } from "../../utils/interests";
 import { readLocalCache, writeLocalCache } from "../../utils/profileCache";
 
-// Cycle of avatar colours (Firestore doesn't store one)
-const AVATAR_COLORS = ["#10B981", "#2563EB", "#DB2777", "#7C3AED", "#C2410C", "#0EA5E9"];
-
-function getInitials(name) {
-    if (!name) return "?";
-    return name
-        .split(" ")
-        .map((word) => word[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase();
-}
-
+// ─── LUXURY COLOR PALETTE (Sponsor Twist) ──────────────────────────────
 const COLORS = {
-    background: "#F9FAFB",
-    surface: "#FFFFFF",
-    navy: "#0F1B3D",
-    primary: "#10B981",
-    primaryLight: "rgba(16, 185, 129, 0.10)",
-    textPrimary: "#0F172A",
-    textSecondary: "#64748B",
-    border: "#E5E7EB",
+    background: "#F8F6EE",       // Cream base
+    surface: "#FFFFFF",          // Clean white
+    primary: "#D9C982",          // Soft Luxury Gold
+    primarySoft: "rgba(217, 201, 130, 0.2)",
+    emerald: "#059669",          // Vibrant Emerald
+    emeraldSoft: "rgba(5, 150, 105, 0.1)",
+    buttonDark: "#013e37",       // Deep luxury green
+    buttonDarkSoft: "rgba(1, 62, 55, 0.08)",
+    textPrimary: "#433327",      // Warm Bronze
+    textSecondary: "#8C7A6B",    // Muted taupe
+    border: "#E8DFD5",
+    danger: "#DC2626",           // Elegant red
     white: "#FFFFFF",
+};
+
+// Premium unified avatar colors
+const AVATAR_COLORS = [
+    COLORS.buttonDark, 
+    COLORS.emerald, 
+    "#607A70", 
+    "#8C7A6B",
+    "#9A8738"
+];
+
+const softShadow = {
+    shadowColor: COLORS.textPrimary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
 };
 
 const FILTERS = [
@@ -51,10 +67,21 @@ const FILTERS = [
 ];
 
 const STATUS_TAG_STYLES = {
-    recommended: { bg: "#DBEAFE", text: "#1D4ED8", label: "Recommended" },
-    interested: { bg: "#EDE9FE", text: "#6D28D9", label: "Interested" },
-    mutual: { bg: "#DCFCE7", text: "#15803D", label: "Mutual" },
+    // Matching the new luxury palette
+    recommended: { bg: COLORS.primarySoft, text: "#9A8738", label: "Recommended" },
+    interested: { bg: COLORS.emeraldSoft, text: COLORS.emerald, label: "Interested" },
+    mutual: { bg: COLORS.buttonDarkSoft, text: COLORS.buttonDark, label: "Mutual" },
 };
+
+function getInitials(name) {
+    if (!name) return "?";
+    return name
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+}
 
 function MatchCard({ match, onPress }) {
     const statusStyle = STATUS_TAG_STYLES[match.status] || STATUS_TAG_STYLES.recommended;
@@ -73,8 +100,8 @@ function MatchCard({ match, onPress }) {
                     {match.verified && (
                         <Ionicons
                             name="checkmark-circle"
-                            size={15}
-                            color={COLORS.primary}
+                            size={16}
+                            color={COLORS.emerald}
                             style={styles.verifiedIcon}
                         />
                     )}
@@ -91,7 +118,7 @@ function MatchCard({ match, onPress }) {
                     </View>
 
                     {match.saved && (
-                        <Ionicons name="heart" size={16} color="#EF4444" />
+                        <Ionicons name="heart" size={16} color={COLORS.danger} />
                     )}
 
                     <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
@@ -108,22 +135,26 @@ function MatchCard({ match, onPress }) {
 }
 
 export default function SponsorMatchesScreen({ navigation }) {
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
     const [activeFilter, setActiveFilter] = useState("recommended");
     const [matches, setMatches] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Load real NGOs + the sponsor's profile, then score each NGO
     const loadMatches = useCallback(async () => {
         const uid = auth.currentUser?.uid;
         try {
-
             let sponsorProfile = {};
             if (uid) {
                 const sponsorSnap = await getDoc(doc(db, "users", uid));
                 if (sponsorSnap.exists()) sponsorProfile = sponsorSnap.data();
             }
 
-            // Saved / interested / mutual flags for this sponsor (never block matches if it fails)
             let interests = {};
             try {
                 interests = await loadSponsorInterests(uid);
@@ -145,7 +176,7 @@ export default function SponsorMatchesScreen({ navigation }) {
                     );
 
                     return {
-                        id: docSnap.id, // real NGO uid, needed for chat + details
+                        id: docSnap.id,
                         name: data.organisationName || "Unnamed NGO",
                         shortName: getInitials(data.organisationName),
                         color: AVATAR_COLORS[index % AVATAR_COLORS.length],
@@ -174,7 +205,6 @@ export default function SponsorMatchesScreen({ navigation }) {
 
     useEffect(() => {
         loadMatches();
-        // Refresh scores whenever the tab is opened (profile may have changed)
         const unsubscribe = navigation.addListener("focus", loadMatches);
         return unsubscribe;
     }, [navigation, loadMatches]);
@@ -191,40 +221,44 @@ export default function SponsorMatchesScreen({ navigation }) {
         navigation.navigate("SponsorMatchDetails", { match });
     };
 
+    if (!fontsLoaded) return null;
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-            <View style={styles.header}>
+            <View style={styles.headerContainer}>
                 <Text style={styles.headerTitle}>My Matches</Text>
             </View>
 
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterRow}
-            >
-                {FILTERS.map((filter) => {
-                    const isActive = activeFilter === filter.value;
-                    return (
-                        <TouchableOpacity
-                            key={filter.value}
-                            style={[styles.filterPill, isActive && styles.filterPillActive]}
-                            activeOpacity={0.8}
-                            onPress={() => setActiveFilter(filter.value)}
-                        >
-                            <Text
-                                style={[
-                                    styles.filterPillText,
-                                    isActive && styles.filterPillTextActive,
-                                ]}
+            <View style={styles.filterWrapper}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterRow}
+                >
+                    {FILTERS.map((filter) => {
+                        const isActive = activeFilter === filter.value;
+                        return (
+                            <TouchableOpacity
+                                key={filter.value}
+                                style={[styles.filterPill, isActive && styles.filterPillActive]}
+                                activeOpacity={0.8}
+                                onPress={() => setActiveFilter(filter.value)}
                             >
-                                {filter.label}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </ScrollView>
+                                <Text
+                                    style={[
+                                        styles.filterPillText,
+                                        isActive && styles.filterPillTextActive,
+                                    ]}
+                                >
+                                    {filter.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
+            </View>
 
             <ScrollView
                 contentContainerStyle={styles.listContent}
@@ -233,7 +267,7 @@ export default function SponsorMatchesScreen({ navigation }) {
                 {loading ? (
                     <ActivityIndicator
                         size="large"
-                        color={COLORS.primary}
+                        color={COLORS.buttonDark}
                         style={{ marginTop: 40 }}
                     />
                 ) : filteredMatches.length > 0 ? (
@@ -245,9 +279,12 @@ export default function SponsorMatchesScreen({ navigation }) {
                         />
                     ))
                 ) : (
-                    <Text style={styles.emptyText}>
-                        No {activeFilter} matches yet — check back soon.
-                    </Text>
+                    <View style={styles.emptyState}>
+                        <Ionicons name="search-outline" size={32} color={COLORS.textSecondary} />
+                        <Text style={styles.emptyText}>
+                            No {activeFilter} matches yet — check back soon.
+                        </Text>
+                    </View>
                 )}
             </ScrollView>
         </SafeAreaView>
@@ -259,73 +296,89 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.background,
     },
-    header: {
-        alignItems: "center",
-        paddingTop: 10,
-        paddingBottom: 16,
+    headerContainer: {
+        paddingHorizontal: 24,
+        paddingTop: 16,
+        paddingBottom: 10,
+        backgroundColor: COLORS.background,
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: "800",
+        fontFamily: "Manrope_700Bold",
+        fontSize: 28,
         color: COLORS.textPrimary,
+        letterSpacing: -0.5,
+    },
+    filterWrapper: {
+        marginBottom: 16,
     },
     filterRow: {
-        paddingHorizontal: 20,
+        paddingHorizontal: 24,
         gap: 10,
-        paddingBottom: 16,
+        paddingBottom: 4,
     },
     filterPill: {
-        paddingHorizontal: 18,
-        paddingVertical: 10,
-        borderRadius: 20,
-        borderWidth: 1.5,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 24, // Pill shape
+        borderWidth: 1,
         borderColor: COLORS.border,
         backgroundColor: COLORS.surface,
+        ...softShadow,
     },
     filterPillActive: {
-        backgroundColor: COLORS.navy,
-        borderColor: COLORS.navy,
+        backgroundColor: COLORS.buttonDark,
+        borderColor: COLORS.buttonDark,
     },
     filterPillText: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: COLORS.textPrimary,
+        fontFamily: "Manrope_600SemiBold",
+        fontSize: 14,
+        color: COLORS.textSecondary,
     },
     filterPillTextActive: {
+        fontFamily: "Manrope_700Bold",
         color: COLORS.white,
     },
     listContent: {
-        paddingHorizontal: 20,
+        paddingHorizontal: 24,
         paddingBottom: 112,
+        gap: 16,
+    },
+    emptyState: {
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 60,
         gap: 12,
     },
     emptyText: {
+        fontFamily: "Manrope_500Medium",
         textAlign: "center",
         color: COLORS.textSecondary,
-        marginTop: 40,
-        fontSize: 14,
+        fontSize: 15,
     },
+    
+    /* Card Styles */
     card: {
         flexDirection: "row",
         alignItems: "center",
         backgroundColor: COLORS.surface,
-        borderRadius: 18,
-        padding: 14,
+        borderRadius: 24,
+        padding: 16,
         borderWidth: 1,
         borderColor: COLORS.border,
+        ...softShadow,
     },
     avatar: {
-        width: 50,
-        height: 50,
-        borderRadius: 16,
+        width: 56,
+        height: 56,
+        borderRadius: 18,
         alignItems: "center",
         justifyContent: "center",
-        marginRight: 14,
+        marginRight: 16,
     },
     avatarText: {
+        fontFamily: "Manrope_700Bold",
         color: COLORS.white,
-        fontSize: 14,
-        fontWeight: "700",
+        fontSize: 16,
     },
     cardContent: {
         flex: 1,
@@ -334,21 +387,22 @@ const styles = StyleSheet.create({
     nameRow: {
         flexDirection: "row",
         alignItems: "center",
-        marginBottom: 3,
+        marginBottom: 4,
     },
     orgName: {
-        fontSize: 15,
-        fontWeight: "700",
+        fontFamily: "Manrope_700Bold",
+        fontSize: 17,
         color: COLORS.textPrimary,
         flexShrink: 1,
     },
     verifiedIcon: {
-        marginLeft: 5,
+        marginLeft: 6,
     },
     subtitle: {
-        fontSize: 12,
+        fontFamily: "Manrope_500Medium",
+        fontSize: 13,
         color: COLORS.textSecondary,
-        marginBottom: 8,
+        marginBottom: 10,
     },
     badgeRow: {
         flexDirection: "row",
@@ -358,30 +412,32 @@ const styles = StyleSheet.create({
     matchPill: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: COLORS.primaryLight,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 20,
-        gap: 4,
+        backgroundColor: COLORS.buttonDarkSoft,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 14,
+        gap: 6,
     },
     matchDot: {
-        width: 5,
-        height: 5,
-        borderRadius: 2.5,
-        backgroundColor: COLORS.primary,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: COLORS.buttonDark,
     },
     matchPillText: {
-        fontSize: 11,
-        fontWeight: "700",
-        color: COLORS.primary,
+        fontFamily: "Manrope_700Bold",
+        fontSize: 12,
+        color: COLORS.buttonDark,
     },
     statusPill: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 14,
     },
     statusPillText: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 11,
-        fontWeight: "700",
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
     },
 });

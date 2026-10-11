@@ -14,6 +14,13 @@ import {
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as ImagePicker from "expo-image-picker";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
 import EditProfileModal from "../../components/sponsors/EditProfileModal";
 import AccountDetailsModal from "../../components/sponsors/AccountDetailsModal";
@@ -29,30 +36,33 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../../../Backend/firebaseConfig";
 
+// ─── LUXURY COLOR PALETTE (Sponsor Twist) ──────────────────────────────
 const COLORS = {
-    background: "#F9FAFB",
-    surface: "#FFFFFF",
-    headerBg: "#0F1B3D", // dark navy
-    primary: "#10B981", // emerald green — sponsor brand accent
-    primaryLight: "rgba(16, 185, 129, 0.12)",
-    textPrimary: "#0F172A",
-    textSecondary: "#64748B",
-    border: "#E5E7EB",
+    background: "#F8F6EE",       // Cream base
+    surface: "#FFFFFF",          // Clean white
+    primary: "#D9C982",          // Soft Luxury Gold
+    primarySoft: "rgba(217, 201, 130, 0.15)",
+    emerald: "#059669",          // Vibrant Emerald 
+    emeraldSoft: "rgba(5, 150, 105, 0.1)",
+    buttonDark: "#013e37",       // Deep luxury green
+    buttonDarkSoft: "rgba(1, 62, 55, 0.08)",
+    textPrimary: "#433327",      // Warm Bronze
+    textSecondary: "#8C7A6B",    // Muted taupe
+    border: "#E8DFD5",
     white: "#FFFFFF",
-    danger: "#EF4444",
-    dangerLight: "rgba(239, 68, 68, 0.10)",
-    muted: "#94A3B8",
-    purple: "#7C3AED",
-    purpleLight: "rgba(124, 58, 237, 0.12)",
-    yellow: "#D97706",
-    yellowLight: "rgba(217, 119, 6, 0.14)",
-    blue: "#2563EB",
-    blueLight: "rgba(37, 99, 235, 0.12)",
-    gray: "#64748B",
-    grayLight: "rgba(100, 116, 139, 0.12)",
+    danger: "#DC2626",           // Elegant red
+    dangerLight: "rgba(220, 38, 38, 0.1)",
+    grayLight: "rgba(140, 122, 107, 0.1)", 
 };
 
-// Derives display initials from an organisation name, e.g. "GreenFuture Foundation" -> "GF"
+const softShadow = {
+    shadowColor: COLORS.textPrimary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+};
+
 function getInitials(name) {
     if (!name) return "?";
     return name
@@ -96,6 +106,13 @@ function ProfileRow({ icon, iconBg, iconColor, title, subtitle, titleColor, righ
 }
 
 export default function SponsorProfileScreen({ navigation }) {
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
     const uid = auth.currentUser?.uid;
 
     const [profile, setProfile] = useState(null);
@@ -107,12 +124,12 @@ export default function SponsorProfileScreen({ navigation }) {
     const [notifOffers, setNotifOffers] = useState(false);
     const [notifUpdates, setNotifUpdates] = useState(true);
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+    
     const [editProfileVisible, setEditProfileVisible] = useState(false);
     const [accountDetailsVisible, setAccountDetailsVisible] = useState(false);
     const [causesVisible, setCausesVisible] = useState(false);
     const [deleteVisible, setDeleteVisible] = useState(false);
 
-    // Pull the real sponsor document from Firestore
     const fetchProfile = async () => {
         if (!uid) return;
         try {
@@ -131,7 +148,6 @@ export default function SponsorProfileScreen({ navigation }) {
         fetchProfile();
     }, [uid]);
 
-    // Avatar photo upload -> Firebase Storage -> save URL on the same doc
     const handlePickImage = async () => {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
@@ -171,7 +187,6 @@ export default function SponsorProfileScreen({ navigation }) {
         }
     };
 
-    // Save edits from the modal straight back to the same Firestore doc
     const handleSaveProfile = async (updatedProfile) => {
         if (!uid) return;
         try {
@@ -186,19 +201,14 @@ export default function SponsorProfileScreen({ navigation }) {
 
             setProfile((prev) => ({
                 ...prev,
+                ...updatedProfile,
                 organisationName: updatedProfile.orgName,
-                email: updatedProfile.email,
-                phone: updatedProfile.phone,
-                website: updatedProfile.website,
-                location: updatedProfile.location,
-                description: updatedProfile.description,
             }));
         } catch (error) {
             Alert.alert("Error Saving Profile", error.message);
         }
     };
 
-    // Industry + budget (Account Details row)
     const handleSaveAccountDetails = async ({ industry, fundingBudget }) => {
         if (!uid) return;
         try {
@@ -210,7 +220,6 @@ export default function SponsorProfileScreen({ navigation }) {
         }
     };
 
-    // Preferred causes (array of cause names)
     const handleSaveCauses = async (causes) => {
         if (!uid) return;
         try {
@@ -222,7 +231,6 @@ export default function SponsorProfileScreen({ navigation }) {
         }
     };
 
-    // Delete account: the modal shows any error, so just let it throw
     const handleDeleteAccount = async (password) => {
         await deleteSponsorAccount(password);
         setDeleteVisible(false);
@@ -246,10 +254,12 @@ export default function SponsorProfileScreen({ navigation }) {
         }
     };
 
+    if (!fontsLoaded) return null;
+
     if (loading) {
         return (
             <SafeAreaView style={[styles.safeArea, styles.centered]}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
+                <ActivityIndicator size="large" color={COLORS.white} />
             </SafeAreaView>
         );
     }
@@ -273,193 +283,208 @@ export default function SponsorProfileScreen({ navigation }) {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="light-content" backgroundColor={COLORS.headerBg} />
+            <StatusBar barStyle="light-content" backgroundColor={COLORS.buttonDark} />
 
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.avatarWrapper}>
-                        <TouchableOpacity activeOpacity={0.85} onPress={handlePickImage} disabled={uploading}>
-                            {profileImageUrl ? (
-                                <Image source={{ uri: profileImageUrl }} style={styles.avatarImage} />
-                            ) : (
-                                <View style={styles.avatar}>
-                                    <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
-                                </View>
-                            )}
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.editBadge}
-                            activeOpacity={0.8}
-                            onPress={handlePickImage}
-                            disabled={uploading}
-                        >
-                            {uploading ? (
-                                <ActivityIndicator size="small" color={COLORS.white} />
-                            ) : (
-                                <Ionicons name="camera" size={14} color={COLORS.white} />
-                            )}
-                        </TouchableOpacity>
-                    </View>
-
-                    <Text style={styles.orgName}>{displayName}</Text>
-
-                    <View style={styles.badgeRow}>
-                        {profileCompleted && (
-                            <View style={styles.verifiedPill}>
-                                <Ionicons name="checkmark-circle" size={12} color={COLORS.white} />
-                                <Text style={styles.verifiedPillText}>Profile Complete</Text>
-                            </View>
-                        )}
-                        {industry ? <Text style={styles.planText}>{industry}</Text> : null}
-                    </View>
-
-                    <Text style={styles.email}>{email || "No email on file"}</Text>
-                </View>
-
-                {/* Body */}
-                <View style={styles.body}>
-                    {/* ACCOUNT */}
-                    <SectionHeader title="ACCOUNT" />
-                    <View style={styles.card}>
-                        <ProfileRow
-                            icon="person-outline"
-                            iconBg={COLORS.primaryLight}
-                            iconColor={COLORS.primary}
-                            title="Edit Profile"
-                            subtitle="Update your organisation details and logo"
-                            onPress={() => setEditProfileVisible(true)}
-                        />
-                        <View style={styles.divider} />
-                        <ProfileRow
-                            icon="business-outline"
-                            iconBg={COLORS.blueLight}
-                            iconColor={COLORS.blue}
-                            title="Account Details"
-                            subtitle={`Industry: ${industry || "Not provided"} · Budget: ${parseAmount(fundingBudget) != null ? `R${parseAmount(fundingBudget).toLocaleString("en-ZA")}` : "Not provided"}`}
-                            onPress={() => setAccountDetailsVisible(true)}
-                        />
-                        <View style={styles.divider} />
-                        <ProfileRow
-                            icon="heart-outline"
-                            iconBg={COLORS.purpleLight}
-                            iconColor={COLORS.purple}
-                            title="Preferred Causes"
-                            subtitle={formatCauses(preferredCauses) || "Not provided"}
-                            onPress={() => setCausesVisible(true)}
-                        />
-                    </View>
-
-                    {/* PREFERENCES */}
-                    <SectionHeader title="PREFERENCES" />
-                    <View style={styles.card}>
-                        <View style={styles.notificationsBlock}>
-                            <View style={styles.rowIconTitleOnly}>
-                                <View style={[styles.rowIcon, { backgroundColor: COLORS.yellowLight }]}>
-                                    <Ionicons name="notifications-outline" size={20} color={COLORS.yellow} />
-                                </View>
-                                <View style={styles.rowContent}>
-                                    <Text style={styles.rowTitle}>Notifications</Text>
-                                    <Text style={styles.rowSubtitle}>
-                                        Manage what you're notified about
-                                    </Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.toggleList}>
-                                <View style={styles.toggleRow}>
-                                    <Text style={styles.toggleLabel}>Matches</Text>
-                                    <Switch
-                                        value={notifMatches}
-                                        onValueChange={setNotifMatches}
-                                        trackColor={{ false: COLORS.border, true: COLORS.primary }}
-                                        thumbColor={COLORS.white}
-                                    />
-                                </View>
-                                <View style={styles.toggleRow}>
-                                    <Text style={styles.toggleLabel}>Messages</Text>
-                                    <Switch
-                                        value={notifMessages}
-                                        onValueChange={setNotifMessages}
-                                        trackColor={{ false: COLORS.border, true: COLORS.primary }}
-                                        thumbColor={COLORS.white}
-                                    />
-                                </View>
-                                <View style={styles.toggleRow}>
-                                    <Text style={styles.toggleLabel}>Offers</Text>
-                                    <Switch
-                                        value={notifOffers}
-                                        onValueChange={setNotifOffers}
-                                        trackColor={{ false: COLORS.border, true: COLORS.primary }}
-                                        thumbColor={COLORS.white}
-                                    />
-                                </View>
-                                <View style={[styles.toggleRow, styles.toggleRowLast]}>
-                                    <Text style={styles.toggleLabel}>Platform Updates</Text>
-                                    <Switch
-                                        value={notifUpdates}
-                                        onValueChange={setNotifUpdates}
-                                        trackColor={{ false: COLORS.border, true: COLORS.primary }}
-                                        thumbColor={COLORS.white}
-                                    />
-                                </View>
-                            </View>
+            <View style={styles.container}>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                    bounces={false}
+                >
+                    {/* Header Block */}
+                    <View style={styles.headerBlock}>
+                        <View style={styles.topHeader}>
+                            <Text style={styles.headerTitle}>PROFILE</Text>
                         </View>
 
-                        <View style={styles.divider} />
+                        <View style={styles.profileHeaderContent}>
+                            <View style={styles.avatarWrapper}>
+                                <TouchableOpacity activeOpacity={0.85} onPress={handlePickImage} disabled={uploading}>
+                                    {profileImageUrl ? (
+                                        <Image source={{ uri: profileImageUrl }} style={styles.avatarImage} />
+                                    ) : (
+                                        <View style={styles.avatar}>
+                                            <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
 
-                        <ProfileRow
-                            icon="shield-checkmark-outline"
-                            iconBg={COLORS.blueLight}
-                            iconColor={COLORS.blue}
-                            title="Two-Factor Authentication"
-                            subtitle={twoFactorEnabled ? "Enabled" : "Disabled — tap to enable"}
-                            right={
-                                <Switch
-                                    value={twoFactorEnabled}
-                                    onValueChange={setTwoFactorEnabled}
-                                    trackColor={{ false: COLORS.border, true: COLORS.primary }}
-                                    thumbColor={COLORS.white}
-                                />
-                            }
-                        />
+                                <TouchableOpacity
+                                    style={styles.editBadge}
+                                    activeOpacity={0.8}
+                                    onPress={handlePickImage}
+                                    disabled={uploading}
+                                >
+                                    {uploading ? (
+                                        <ActivityIndicator size="small" color={COLORS.buttonDark} />
+                                    ) : (
+                                        <Ionicons name="camera" size={14} color={COLORS.buttonDark} />
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.nameRow}>
+                                <Text style={styles.orgName}>{displayName}</Text>
+                                {profileCompleted && (
+                                    <Ionicons 
+                                        name="checkmark-circle" 
+                                        size={22} 
+                                        color={COLORS.primary} 
+                                        style={styles.verifiedIcon} 
+                                    />
+                                )}
+                            </View>
+
+                            <Text style={styles.email}>{email || "No email on file"}</Text>
+
+                            {industry ? (
+                                <View style={styles.industryPill}>
+                                    <Text style={styles.industryPillText}>{industry}</Text>
+                                </View>
+                            ) : null}
+                        </View>
                     </View>
 
-                    {/* DANGER ZONE */}
-                    <SectionHeader title="DANGER ZONE" />
-                    <View style={styles.card}>
-                        <ProfileRow
-                            icon="log-out-outline"
-                            iconBg={COLORS.grayLight}
-                            iconColor={COLORS.gray}
-                            title="Sign Out"
-                            subtitle="Sign out of your ImpactMatch account"
-                            onPress={handleSignOut}
-                        />
-                        <View style={styles.divider} />
-                        <ProfileRow
-                            icon="trash-outline"
-                            iconBg={COLORS.dangerLight}
-                            iconColor={COLORS.danger}
-                            titleColor={COLORS.danger}
-                            title="Delete Account"
-                            subtitle="Permanently delete your account and all associated data"
-                            onPress={() => setDeleteVisible(true)}
-                        />
-                    </View>
+                    {/* Body */}
+                    <View style={styles.body}>
+                        {/* ACCOUNT */}
+                        <SectionHeader title="ACCOUNT" />
+                        <View style={styles.card}>
+                            <ProfileRow
+                                icon="person-outline"
+                                iconBg={COLORS.buttonDarkSoft}
+                                iconColor={COLORS.buttonDark}
+                                title="Edit Profile"
+                                subtitle="Update your organisation details and logo"
+                                onPress={() => setEditProfileVisible(true)}
+                            />
+                            <View style={styles.divider} />
+                            <ProfileRow
+                                icon="business-outline"
+                                iconBg={COLORS.primarySoft}
+                                iconColor={COLORS.buttonDark}
+                                title="Account Details"
+                                subtitle={`Industry: ${industry || "Not provided"} · Budget: ${parseAmount(fundingBudget) != null ? `R${parseAmount(fundingBudget).toLocaleString("en-ZA")}` : "Not provided"}`}
+                                onPress={() => setAccountDetailsVisible(true)}
+                            />
+                            <View style={styles.divider} />
+                            <ProfileRow
+                                icon="heart-outline"
+                                iconBg={COLORS.emeraldSoft}
+                                iconColor={COLORS.emerald}
+                                title="Preferred Causes"
+                                subtitle={formatCauses(preferredCauses) || "Not provided"}
+                                onPress={() => setCausesVisible(true)}
+                            />
+                        </View>
 
-                    {/* Footer */}
-                    <View style={styles.footer}>
-                        <Text style={styles.footerText}>
-                            ImpactMatch v1.0 · Privacy Policy · Terms of Service
-                        </Text>
+                        {/* PREFERENCES */}
+                        <SectionHeader title="PREFERENCES" />
+                        <View style={styles.card}>
+                            <View style={styles.notificationsBlock}>
+                                <View style={styles.rowIconTitleOnly}>
+                                    <View style={[styles.rowIcon, { backgroundColor: COLORS.primarySoft }]}>
+                                        <Ionicons name="notifications-outline" size={20} color={COLORS.buttonDark} />
+                                    </View>
+                                    <View style={styles.rowContent}>
+                                        <Text style={styles.rowTitle}>Notifications</Text>
+                                        <Text style={styles.rowSubtitle}>
+                                            Manage what you're notified about
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.toggleList}>
+                                    <View style={styles.toggleRow}>
+                                        <Text style={styles.toggleLabel}>Matches</Text>
+                                        <Switch
+                                            value={notifMatches}
+                                            onValueChange={setNotifMatches}
+                                            trackColor={{ false: COLORS.border, true: COLORS.buttonDark }}
+                                            thumbColor={COLORS.white}
+                                        />
+                                    </View>
+                                    <View style={styles.toggleRow}>
+                                        <Text style={styles.toggleLabel}>Messages</Text>
+                                        <Switch
+                                            value={notifMessages}
+                                            onValueChange={setNotifMessages}
+                                            trackColor={{ false: COLORS.border, true: COLORS.buttonDark }}
+                                            thumbColor={COLORS.white}
+                                        />
+                                    </View>
+                                    <View style={styles.toggleRow}>
+                                        <Text style={styles.toggleLabel}>Offers</Text>
+                                        <Switch
+                                            value={notifOffers}
+                                            onValueChange={setNotifOffers}
+                                            trackColor={{ false: COLORS.border, true: COLORS.buttonDark }}
+                                            thumbColor={COLORS.white}
+                                        />
+                                    </View>
+                                    <View style={[styles.toggleRow, styles.toggleRowLast]}>
+                                        <Text style={styles.toggleLabel}>Platform Updates</Text>
+                                        <Switch
+                                            value={notifUpdates}
+                                            onValueChange={setNotifUpdates}
+                                            trackColor={{ false: COLORS.border, true: COLORS.buttonDark }}
+                                            thumbColor={COLORS.white}
+                                        />
+                                    </View>
+                                </View>
+                            </View>
+
+                            <View style={styles.divider} />
+
+                            <ProfileRow
+                                icon="shield-checkmark-outline"
+                                iconBg={COLORS.buttonDarkSoft}
+                                iconColor={COLORS.buttonDark}
+                                title="Two-Factor Authentication"
+                                subtitle={twoFactorEnabled ? "Enabled" : "Disabled — tap to enable"}
+                                right={
+                                    <Switch
+                                        value={twoFactorEnabled}
+                                        onValueChange={setTwoFactorEnabled}
+                                        trackColor={{ false: COLORS.border, true: COLORS.buttonDark }}
+                                        thumbColor={COLORS.white}
+                                    />
+                                }
+                            />
+                        </View>
+
+                        {/* DANGER ZONE */}
+                        <SectionHeader title="DANGER ZONE" />
+                        <View style={styles.card}>
+                            <ProfileRow
+                                icon="log-out-outline"
+                                iconBg={COLORS.grayLight}
+                                iconColor={COLORS.textSecondary}
+                                title="Sign Out"
+                                subtitle="Sign out of your ImpactMatch account"
+                                onPress={handleSignOut}
+                            />
+                            <View style={styles.divider} />
+                            <ProfileRow
+                                icon="trash-outline"
+                                iconBg={COLORS.dangerLight}
+                                iconColor={COLORS.danger}
+                                titleColor={COLORS.danger}
+                                title="Delete Account"
+                                subtitle="Permanently delete your account and all associated data"
+                                onPress={() => setDeleteVisible(true)}
+                            />
+                        </View>
+
+                        {/* Footer */}
+                        <View style={styles.footer}>
+                            <Text style={styles.footerText}>
+                                ImpactMatch v1.0 · Privacy Policy · Terms of Service
+                            </Text>
+                        </View>
                     </View>
-                </View>
-            </ScrollView>
+                </ScrollView>
+            </View>
 
             <EditProfileModal
                 visible={editProfileVisible}
@@ -505,7 +530,11 @@ export default function SponsorProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: COLORS.headerBg,
+        backgroundColor: COLORS.buttonDark, // Matches the notch to the dark green header
+    },
+    container: {
+        flex: 1,
+        backgroundColor: COLORS.background, // The rest of the screen is cream
     },
     centered: {
         justifyContent: "center",
@@ -514,163 +543,179 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingBottom: 40,
     },
-    header: {
-        backgroundColor: COLORS.headerBg,
+
+    /* ─── HEADER BLOCK ─── */
+    headerBlock: {
+        backgroundColor: COLORS.buttonDark,
+        borderBottomLeftRadius: 36,
+        borderBottomRightRadius: 36,
+        paddingBottom: 36,
+        marginBottom: 24,
+        ...softShadow,
+    },
+    topHeader: {
         alignItems: "center",
-        paddingTop: 24,
-        paddingBottom: 28,
+        paddingVertical: 20,
+    },
+    headerTitle: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 14,
+        color: COLORS.white,
+        letterSpacing: 2,
+    },
+    profileHeaderContent: {
+        alignItems: "center",
         paddingHorizontal: 24,
-        borderBottomLeftRadius: 28,
-        borderBottomRightRadius: 28,
     },
     avatarWrapper: {
-        marginBottom: 14,
+        marginBottom: 16,
     },
     avatar: {
-        width: 84,
-        height: 84,
-        borderRadius: 42,
-        backgroundColor: "rgba(255,255,255,0.12)",
-        borderWidth: 2,
-        borderColor: "rgba(255,255,255,0.25)",
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: COLORS.primary, // Luxury Gold background
         alignItems: "center",
         justifyContent: "center",
+        borderWidth: 3,
+        borderColor: "rgba(255,255,255,0.15)",
     },
     avatarImage: {
-        width: 84,
-        height: 84,
-        borderRadius: 42,
-        borderWidth: 2,
-        borderColor: "rgba(255,255,255,0.25)",
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        borderWidth: 3,
+        borderColor: "rgba(255,255,255,0.15)",
     },
     avatarText: {
-        color: COLORS.white,
-        fontSize: 26,
-        fontWeight: "800",
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.buttonDark,
+        fontSize: 32,
     },
     editBadge: {
         position: "absolute",
-        bottom: -2,
-        right: -2,
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: COLORS.primary,
+        bottom: 0,
+        right: 0,
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: COLORS.primary, // Gold edit button
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: 2,
-        borderColor: COLORS.headerBg,
+        borderWidth: 3,
+        borderColor: COLORS.buttonDark,
     },
-    orgName: {
-        fontSize: 20,
-        fontWeight: "800",
-        color: COLORS.white,
-        marginBottom: 8,
-        textAlign: "center",
-    },
-    badgeRow: {
+    nameRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
+        justifyContent: "center",
         marginBottom: 6,
     },
-    verifiedPill: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: COLORS.primary,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 10,
-        gap: 4,
-    },
-    verifiedPillText: {
-        fontSize: 11,
-        fontWeight: "700",
+    orgName: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 24,
         color: COLORS.white,
+        letterSpacing: -0.5,
     },
-    planText: {
-        fontSize: 13,
-        fontWeight: "500",
-        color: "rgba(255,255,255,0.7)",
+    verifiedIcon: {
+        marginLeft: 6,
     },
     email: {
-        fontSize: 13,
-        color: "rgba(203, 213, 225, 0.8)",
-        marginBottom: 4,
+        fontFamily: "Manrope_500Medium",
+        fontSize: 14,
+        color: "rgba(255, 255, 255, 0.7)",
+        marginBottom: 16,
     },
+    industryPill: {
+        backgroundColor: "rgba(255, 255, 255, 0.08)",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: "rgba(255, 255, 255, 0.15)",
+    },
+    industryPillText: {
+        fontFamily: "Manrope_600SemiBold",
+        fontSize: 12,
+        color: COLORS.primary, // Gold text
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+    },
+
+    /* ─── BODY ─── */
     body: {
-        backgroundColor: COLORS.background,
-        paddingHorizontal: 20,
-        paddingTop: 24,
-        borderTopLeftRadius: 0,
+        paddingHorizontal: 24,
     },
     sectionHeader: {
-        fontSize: 12,
-        fontWeight: "700",
+        fontFamily: "Manrope_700Bold",
+        fontSize: 13,
         color: COLORS.textSecondary,
-        letterSpacing: 0.6,
-        marginBottom: 10,
-        marginTop: 4,
+        letterSpacing: 1.5,
+        textTransform: "uppercase",
+        marginBottom: 12,
+        marginTop: 8,
     },
     card: {
         backgroundColor: COLORS.surface,
-        borderRadius: 16,
+        borderRadius: 20,
         borderWidth: 1,
         borderColor: COLORS.border,
         overflow: "hidden",
-        marginBottom: 24,
+        marginBottom: 28,
+        ...softShadow,
     },
     divider: {
         height: 1,
-        backgroundColor: COLORS.border,
-        marginLeft: 66,
+        backgroundColor: COLORS.background, // Matches screen bg to look clean
+        marginLeft: 70, // Aligns perfectly with the text
     },
     row: {
         flexDirection: "row",
         alignItems: "center",
-        padding: 14,
+        padding: 16,
     },
     rowIconTitleOnly: {
         flexDirection: "row",
         alignItems: "center",
-        padding: 14,
-        paddingBottom: 4,
+        padding: 16,
+        paddingBottom: 8,
     },
     rowIcon: {
-        width: 38,
-        height: 38,
-        borderRadius: 12,
+        width: 44,
+        height: 44,
+        borderRadius: 14,
         alignItems: "center",
         justifyContent: "center",
-        marginRight: 12,
+        marginRight: 16,
     },
     rowContent: {
         flex: 1,
         marginRight: 8,
     },
     rowTitle: {
-        fontSize: 15,
-        fontWeight: "700",
+        fontFamily: "Manrope_700Bold",
+        fontSize: 16,
         color: COLORS.textPrimary,
         marginBottom: 2,
     },
     rowSubtitle: {
-        fontSize: 12,
+        fontFamily: "Manrope_500Medium",
+        fontSize: 13,
         color: COLORS.textSecondary,
-        lineHeight: 16,
+        lineHeight: 18,
     },
     notificationsBlock: {
-        paddingBottom: 6,
+        paddingBottom: 8,
     },
     toggleList: {
-        paddingHorizontal: 14,
-        paddingLeft: 66,
+        paddingHorizontal: 16,
+        paddingLeft: 76, 
     },
     toggleRow: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        paddingVertical: 10,
+        paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: COLORS.background,
     },
@@ -678,18 +723,19 @@ const styles = StyleSheet.create({
         borderBottomWidth: 0,
     },
     toggleLabel: {
+        fontFamily: "Manrope_600SemiBold",
         fontSize: 14,
         color: COLORS.textPrimary,
-        fontWeight: "500",
     },
     footer: {
         alignItems: "center",
-        paddingVertical: 12,
-        paddingBottom: 4,
+        paddingVertical: 16,
+        paddingBottom: 16,
     },
     footerText: {
+        fontFamily: "Manrope_500Medium",
         fontSize: 12,
-        color: COLORS.muted,
+        color: COLORS.textSecondary,
         textAlign: "center",
     },
 });

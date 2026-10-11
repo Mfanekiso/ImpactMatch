@@ -11,15 +11,47 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
+import Ionicons from "@react-native-vector-icons/ionicons";
+import {
+  useFonts,
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
 const { width } = Dimensions.get("window");
 
-// Mock Data
+// ─── LUXURY COLOR PALETTE (Sponsor Twist) ──────────────────────────────
+const COLORS = {
+  background: "#F8F6EE",       // Cream base
+  surface: "#FFFFFF",          // Clean white
+  primary: "#D9C982",          // Soft Luxury Gold
+  primarySoft: "rgba(217, 201, 130, 0.2)",
+  emerald: "#059669",          // Vibrant Emerald
+  emeraldSoft: "rgba(5, 150, 105, 0.1)",
+  buttonDark: "#013e37",       // Deep luxury green
+  buttonDarkSoft: "rgba(1, 62, 55, 0.08)",
+  textPrimary: "#433327",      // Warm Bronze
+  textSecondary: "#8C7A6B",    // Muted taupe
+  border: "#E8DFD5",
+  white: "#FFFFFF",
+};
+
+const softShadow = {
+  shadowColor: COLORS.textPrimary,
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.04,
+  shadowRadius: 10,
+  elevation: 2,
+};
+
+// ─── MOCK DATA ────────────────────────────────────────────────────────
 const SUMMARY_STATS = [
-  { id: "1", label: "Funding", value: "R4.2M", bgColor: "#EFF6FF", color: "#1E40AF" },
-  { id: "2", label: "Partners", value: "6", bgColor: "#ECFDF5", color: "#047857" },
-  { id: "3", label: "Projects", value: "9", bgColor: "#FEF3C7", color: "#B45309" },
-  { id: "4", label: "Beneficiaries", value: "94k", bgColor: "#F3E8FF", color: "#6B21A8" },
+  { id: "1", label: "Funding", value: "R4.2M", bgColor: COLORS.primarySoft, color: COLORS.buttonDark },
+  { id: "2", label: "Partners", value: "6", bgColor: COLORS.emeraldSoft, color: COLORS.emerald },
+  { id: "3", label: "Projects", value: "9", bgColor: COLORS.surface, color: COLORS.textPrimary, border: COLORS.border },
+  { id: "4", label: "People", value: "94k", bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
 ];
 
 const BENEFICIARY_POINTS = [
@@ -32,7 +64,7 @@ const BENEFICIARY_POINTS = [
 ];
 
 const FUNDING_BY_CAUSE = [
-  { cause: "Education", percentage: 36, heightPct: 0.8 },
+  { cause: "Edu.", percentage: 36, heightPct: 0.8 },
   { cause: "Health", percentage: 22, heightPct: 0.55 },
   { cause: "Env.", percentage: 18, heightPct: 0.42 },
   { cause: "Youth", percentage: 15, heightPct: 0.35 },
@@ -42,7 +74,7 @@ const FUNDING_BY_CAUSE = [
 const ACTIVE_PROJECTS = [
   {
     id: "proj-1",
-    title: "Digital Learning Centre —...",
+    title: "Digital Learning Centre",
     org: "Education For All",
     beneficiaries: "3,200 beneficiaries",
     status: "Active",
@@ -55,7 +87,7 @@ const ACTIVE_PROJECTS = [
   },
   {
     id: "proj-2",
-    title: "Fynbos Restoration ...",
+    title: "Fynbos Restoration",
     org: "GreenRoots Africa",
     beneficiaries: "1,200 beneficiaries",
     status: "Fully Funded",
@@ -68,7 +100,7 @@ const ACTIVE_PROJECTS = [
   },
   {
     id: "proj-3",
-    title: "Mobile Maternal Clinic...",
+    title: "Mobile Maternal Clinic",
     org: "Umunthu Health Trust",
     beneficiaries: "4,800 beneficiaries",
     status: "Active",
@@ -82,7 +114,13 @@ const ACTIVE_PROJECTS = [
 ];
 
 export default function ImpactDashboardScreen() {
-  // Animation References
+  const [fontsLoaded] = useFonts({
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+  });
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const barAnim = useRef(new Animated.Value(0)).current;
@@ -105,11 +143,13 @@ export default function ImpactDashboardScreen() {
         useNativeDriver: false,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim, barAnim]);
+
+  if (!fontsLoaded) return null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <View style={styles.container}>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -125,7 +165,14 @@ export default function ImpactDashboardScreen() {
             {/* Top Stat Cards Grid */}
             <View style={styles.statsGrid}>
               {SUMMARY_STATS.map((stat) => (
-                <View key={stat.id} style={[styles.statCard, { backgroundColor: stat.bgColor }]}>
+                <View 
+                  key={stat.id} 
+                  style={[
+                    styles.statCard, 
+                    { backgroundColor: stat.bgColor },
+                    stat.border && { borderWidth: 1, borderColor: stat.border }
+                  ]}
+                >
                   <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
                   <Text style={styles.statLabel}>{stat.label}</Text>
                 </View>
@@ -133,7 +180,7 @@ export default function ImpactDashboardScreen() {
             </View>
           </Animated.View>
 
-          {/* Section 1: Beneficiaries Over Time (Line Chart View) */}
+          {/* Section 1: Beneficiaries Over Time */}
           <View style={styles.sectionCard}>
             <Text style={styles.cardTitle}>Beneficiaries Over Time</Text>
             
@@ -157,13 +204,13 @@ export default function ImpactDashboardScreen() {
                   <View style={styles.gridLine} />
                 </View>
 
-                {/* Simulated Line Graph Line */}
+                {/* Simulated Line Graph Overlay */}
                 <View style={styles.lineGraphOverlay}>
                   {BENEFICIARY_POINTS.map((pt, index) => {
                     if (index === BENEFICIARY_POINTS.length - 1) return null;
                     return (
                       <View
-                        key={index}
+                        key={`segment-${index}`}
                         style={[
                           styles.lineSegment,
                           {
@@ -176,12 +223,12 @@ export default function ImpactDashboardScreen() {
                   })}
                   {BENEFICIARY_POINTS.map((pt, index) => (
                     <View
-                      key={index}
+                      key={`point-${index}`}
                       style={[
                         styles.chartPoint,
                         {
                           left: `${(index / (BENEFICIARY_POINTS.length - 1)) * 80 + 8}%`,
-                          bottom: `${pt.val * 0.7 - 2}%`,
+                          bottom: `${(pt.val * 0.7) - 2}%`,
                         },
                       ]}
                     />
@@ -201,13 +248,14 @@ export default function ImpactDashboardScreen() {
 
             {/* Growth Pill */}
             <View style={styles.growthBadge}>
+              <Ionicons name="trending-up" size={16} color={COLORS.emerald} style={styles.growthIcon} />
               <Text style={styles.growthBadgeText}>
-                📈 +124% beneficiary growth in 6 months
+                +124% beneficiary growth in 6 months
               </Text>
             </View>
           </View>
 
-          {/* Section 2: Funding by Cause (Bar Chart) */}
+          {/* Section 2: Funding by Cause */}
           <View style={styles.sectionCard}>
             <Text style={styles.cardTitle}>Funding by Cause</Text>
             
@@ -248,7 +296,7 @@ export default function ImpactDashboardScreen() {
           {/* Section 3: Active Project Impact */}
           <Text style={styles.sectionHeaderTitle}>Active Project Impact</Text>
           {ACTIVE_PROJECTS.map((project) => (
-            <TouchableOpacity key={project.id} activeOpacity={0.9} style={styles.projectCard}>
+            <TouchableOpacity key={project.id} activeOpacity={0.8} style={styles.projectCard}>
               <View style={styles.projectCardHeader}>
                 <Image source={{ uri: project.image }} style={styles.projectThumb} />
                 <View style={styles.projectMeta}>
@@ -328,158 +376,229 @@ export default function ImpactDashboardScreen() {
             </View>
           </View>
         </ScrollView>
-
-        {/* --- BOTTOM NAVIGATION BAR ---
-        <View style={styles.bottomNav}>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>🏠</Text>
-            <Text style={styles.navLabel}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>🔍</Text>
-            <Text style={styles.navLabel}>Discover</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>🤝</Text>
-            <Text style={styles.navLabel}>Matches</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>💬</Text>
-            <Text style={styles.navLabel}>Messages</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <View style={styles.activeNavPill}>
-              <Text style={[styles.navIcon, styles.activeNavIcon]}>📊</Text>
-            </View>
-            <Text style={[styles.navLabel, styles.activeNavLabel]}>Impact</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navIcon}>👤</Text>
-            <Text style={styles.navLabel}>Profile</Text>
-          </TouchableOpacity>
-        </View> */}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 112 },
+  safeArea: { 
+    flex: 1, 
+    backgroundColor: COLORS.background 
+  },
+  container: { 
+    flex: 1, 
+    backgroundColor: COLORS.background 
+  },
+  scrollContent: { 
+    paddingHorizontal: 24, 
+    paddingTop: 16, 
+    paddingBottom: 112 
+  },
 
   /* Header */
-  headerContainer: { marginBottom: 16 },
-  headerTitle: { fontSize: 22, fontWeight: "700", color: "#0F172A" },
-  headerSubtitle: { fontSize: 13, color: "#64748B", marginTop: 2, marginBottom: 16 },
+  headerContainer: { 
+    marginBottom: 24 
+  },
+  headerTitle: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 28, 
+    color: COLORS.textPrimary,
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: { 
+    fontFamily: "Manrope_500Medium",
+    fontSize: 14, 
+    color: COLORS.textSecondary, 
+    marginTop: 4, 
+    marginBottom: 24 
+  },
 
   /* Top Metric Cards */
-  statsGrid: { flexDirection: "row", justifyContent: "space-between" },
-  statCard: {
-    width: (width - 32 - 24) / 4,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
+  statsGrid: { 
+    flexDirection: "row", 
+    justifyContent: "space-between",
+    gap: 8,
   },
-  statValue: { fontSize: 16, fontWeight: "800" },
-  statLabel: { fontSize: 11, color: "#475569", marginTop: 4 },
+  statCard: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    ...softShadow,
+  },
+  statValue: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 18, 
+  },
+  statLabel: { 
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 11, 
+    color: COLORS.textSecondary, 
+    marginTop: 4 
+  },
 
   /* Section Cards */
   sectionCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: COLORS.border,
+    ...softShadow,
   },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: "#0F172A", marginBottom: 12 },
+  cardTitle: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 18, 
+    color: COLORS.textPrimary, 
+    marginBottom: 20 
+  },
 
   /* Beneficiary Line Chart */
-  chartContainer: { flexDirection: "row", height: 130, marginBottom: 12 },
-  yAxisContainer: { justifyContent: "space-between", paddingRight: 8 },
-  axisText: { fontSize: 10, color: "#94A3B8" },
+  chartContainer: { flexDirection: "row", height: 130, marginBottom: 16 },
+  yAxisContainer: { justifyContent: "space-between", paddingRight: 12 },
+  axisText: { 
+    fontFamily: "Manrope_500Medium",
+    fontSize: 11, 
+    color: COLORS.textSecondary 
+  },
   lineAreaContainer: { flex: 1, position: "relative" },
   gridLineContainer: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, justifyContent: "space-between" },
-  gridLine: { height: 1, backgroundColor: "#F1F5F9", width: "100%" },
+  gridLine: { height: 1, backgroundColor: COLORS.background, width: "100%" },
   lineGraphOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0 },
   chartPoint: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#15803D",
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.buttonDark,
     position: "absolute",
+    zIndex: 2,
   },
   lineSegment: {
-    width: 30,
+    width: 35,
     height: 2,
-    backgroundColor: "#15803D",
+    backgroundColor: COLORS.emerald,
     position: "absolute",
     transform: [{ rotate: "-15deg" }],
+    zIndex: 1,
   },
   xAxisContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     position: "absolute",
-    bottom: -16,
+    bottom: -20,
     left: 0,
     right: 0,
   },
   growthBadge: {
-    backgroundColor: "#ECFDF5",
-    borderRadius: 8,
-    paddingVertical: 8,
+    flexDirection: "row",
+    backgroundColor: COLORS.emeraldSoft,
+    borderRadius: 12,
+    paddingVertical: 10,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    marginTop: 12,
   },
-  growthBadgeText: { fontSize: 12, color: "#166534", fontWeight: "600" },
+  growthIcon: { marginRight: 6 },
+  growthBadgeText: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 12, 
+    color: COLORS.emerald, 
+  },
 
   /* Bar Chart */
   barChartContainer: { flexDirection: "row", height: 140, alignItems: "flex-end" },
-  barYAxis: { height: "100%", justifyContent: "space-between", paddingRight: 8, paddingBottom: 20 },
+  barYAxis: { height: "100%", justifyContent: "space-between", paddingRight: 12, paddingBottom: 20 },
   barsArea: { flex: 1, flexDirection: "row", justifyContent: "space-around", alignItems: "flex-end" },
   barColumn: { alignItems: "center" },
-  barTrack: { height: 110, justifyContent: "flex-end", width: 24, borderRadius: 4 },
-  barFill: { width: "100%", backgroundColor: "#0F2942", borderRadius: 4 },
-  barLabel: { fontSize: 11, color: "#64748B", marginTop: 6 },
+  barTrack: { height: 110, justifyContent: "flex-end", width: 28, borderRadius: 6, backgroundColor: COLORS.background },
+  barFill: { width: "100%", backgroundColor: COLORS.buttonDark, borderRadius: 6 },
+  barLabel: { 
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 11, 
+    color: COLORS.textSecondary, 
+    marginTop: 8 
+  },
 
   /* Active Projects */
-  sectionHeaderTitle: { fontSize: 16, fontWeight: "700", color: "#0F172A", marginTop: 8, marginBottom: 12 },
+  sectionHeaderTitle: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 18, 
+    color: COLORS.textPrimary, 
+    marginTop: 8, 
+    marginBottom: 16 
+  },
   projectCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: COLORS.border,
+    ...softShadow,
   },
   projectCardHeader: { flexDirection: "row" },
-  projectThumb: { width: 52, height: 52, borderRadius: 8, marginRight: 12 },
-  projectMeta: { flex: 1 },
+  projectThumb: { width: 56, height: 56, borderRadius: 12, marginRight: 16 },
+  projectMeta: { flex: 1, justifyContent: "center" },
   projectTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  projectTitle: { fontSize: 14, fontWeight: "700", color: "#0F172A", flex: 1 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginLeft: 6 },
-  statusBadgeActive: { backgroundColor: "#EFF6FF" },
-  statusBadgeCompleted: { backgroundColor: "#DCFCE7" },
-  statusBadgeText: { fontSize: 10, fontWeight: "600" },
-  statusTextActive: { color: "#2563EB" },
-  statusTextCompleted: { color: "#166534" },
-  projectOrg: { fontSize: 12, color: "#64748B", marginTop: 2 },
-  projectBeneficiaries: { fontSize: 12, color: "#166534", fontWeight: "600", marginTop: 2 },
+  projectTitle: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 15, 
+    color: COLORS.textPrimary, 
+    flex: 1 
+  },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginLeft: 8 },
+  statusBadgeActive: { backgroundColor: COLORS.primarySoft },
+  statusBadgeCompleted: { backgroundColor: COLORS.emeraldSoft },
+  statusBadgeText: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 10, 
+    textTransform: "uppercase" 
+  },
+  statusTextActive: { color: COLORS.textPrimary },
+  statusTextCompleted: { color: COLORS.emerald },
+  projectOrg: { 
+    fontFamily: "Manrope_500Medium",
+    fontSize: 12, 
+    color: COLORS.textSecondary, 
+    marginTop: 4 
+  },
+  projectBeneficiaries: { 
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 12, 
+    color: COLORS.emerald, 
+    marginTop: 4 
+  },
 
-  progressBarTrack: { height: 6, backgroundColor: "#E2E8F0", borderRadius: 3, marginTop: 10, overflow: "hidden" },
-  progressBarFill: { height: "100%", backgroundColor: "#227B53" },
-  progressValueRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
-  raisedText: { fontSize: 11, color: "#227B53", fontWeight: "600" },
-  goalText: { fontSize: 11, color: "#64748B" },
+  progressBarTrack: { 
+    height: 8, 
+    backgroundColor: COLORS.background, 
+    borderRadius: 4, 
+    marginTop: 16, 
+    overflow: "hidden" 
+  },
+  progressBarFill: { height: "100%", backgroundColor: COLORS.emerald },
+  progressValueRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  raisedText: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 12, 
+    color: COLORS.emerald, 
+  },
+  goalText: { 
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 12, 
+    color: COLORS.textSecondary 
+  },
 
   /* Impact Story Card */
   storyCard: {
-    height: 180,
-    borderRadius: 16,
+    height: 200,
+    borderRadius: 20,
     overflow: "hidden",
     position: "relative",
-    marginBottom: 20,
+    marginBottom: 24,
+    ...softShadow,
   },
   storyImage: { width: "100%", height: "100%" },
   storyOverlay: {
@@ -487,38 +606,33 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 12,
-    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    padding: 16,
+    backgroundColor: "rgba(1, 62, 55, 0.7)", // Deep luxury green transparent overlay
   },
   storyCategoryBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: COLORS.primarySoft,
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginBottom: 4,
-  },
-  storyCategoryText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600" },
-  storyTitle: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
-  storySubText: { color: "#CBD5E1", fontSize: 11, marginTop: 2 },
-
-  /* Bottom Navigation */
-  bottomNav: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingVertical: 6,
-  },
-  navItem: { flex: 1, alignItems: "center" },
-  navIcon: { fontSize: 18, color: "#64748B" },
-  navLabel: { fontSize: 10, color: "#64748B", marginTop: 2 },
-  activeNavPill: {
-    backgroundColor: "#DCFCE7",
     paddingHorizontal: 10,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginBottom: 8,
   },
-  activeNavIcon: { color: "#166534" },
-  activeNavLabel: { color: "#166534", fontWeight: "700" },
+  storyCategoryText: { 
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.primary, 
+    fontSize: 10, 
+    textTransform: "uppercase" 
+  },
+  storyTitle: { 
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.white, 
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  storySubText: { 
+    fontFamily: "Manrope_500Medium",
+    color: COLORS.border, 
+    fontSize: 12, 
+    marginTop: 6 
+  },
 });

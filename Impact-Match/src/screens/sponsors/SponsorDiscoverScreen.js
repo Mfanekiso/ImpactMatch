@@ -14,6 +14,13 @@ import {
   Alert,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import {
+  useFonts,
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
 import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
@@ -21,21 +28,44 @@ import { loadSponsorInterests, setSaved, setInterested } from "../../utils/inter
 import { startConversationWithNgo } from "../../utils/startConversation";
 
 // ======================================================
-// HELPERS
+// LUXURY THEME CONFIG
 // ======================================================
 
+const COLORS = {
+  background: "#F8F6EE",       // Cream base
+  surface: "#FFFFFF",          // Clean white
+  primary: "#D9C982",          // Soft Luxury Gold
+  primarySoft: "rgba(217, 201, 130, 0.15)",
+  emerald: "#059669",          // Vibrant Emerald
+  emeraldSoft: "rgba(5, 150, 105, 0.1)",
+  buttonDark: "#013e37",       // Deep luxury green
+  buttonDarkSoft: "rgba(1, 62, 55, 0.08)",
+  textPrimary: "#433327",      // Warm Bronze
+  textSecondary: "#8C7A6B",    // Muted taupe
+  border: "#E8DFD5",
+  danger: "#DC2626",           // Elegant red for favorites
+  white: "#FFFFFF",
+};
+
+const softShadow = {
+  shadowColor: COLORS.textPrimary,
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.05,
+  shadowRadius: 10,
+  elevation: 3,
+};
+
+// Premium unified avatar colors
 const AVATAR_COLORS = [
-  "#1D3557",
-  "#2A9D8F",
-  "#7C3AED",
-  "#C2410C",
-  "#0EA5E9",
-  "#DB2777",
+  COLORS.buttonDark, 
+  COLORS.emerald, 
+  COLORS.primary, 
+  "#607A70", 
+  "#8C7A6B"
 ];
 
 function getInitials(name) {
   if (!name) return "?";
-
   return name
     .split(" ")
     .map((word) => word[0])
@@ -49,15 +79,19 @@ function getInitials(name) {
 // ======================================================
 
 export default function SponsorDiscoverScreen({ navigation }) {
+  const [fontsLoaded] = useFonts({
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+  });
+
   const [activeTab, setActiveTab] = useState("Organisations");
   const [searchQuery, setSearchQuery] = useState("");
-
   const [favorites, setFavorites] = useState({});
-
-  // Which NGOs the sponsor has pressed "Express Interest" on ({ [ngoId]: true })
   const [interestedIds, setInterestedIds] = useState({});
 
-  // Firebase NGO data
+  // Data state
   const [ngos, setNgos] = useState([]);
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -74,57 +108,31 @@ export default function SponsorDiscoverScreen({ navigation }) {
   const [selectedProject, setSelectedProject] = useState(null);
 
   // ====================================================
-  // FETCH NGOs FROM FIREBASE
+  // FETCH DATA
   // ====================================================
 
   useEffect(() => {
     const fetchNgos = async () => {
       try {
         setLoading(true);
-
-        const ngoQuery = query(
-          collection(db, "users"),
-          where("role", "==", "ngo")
-        );
-
+        const ngoQuery = query(collection(db, "users"), where("role", "==", "ngo"));
         const snapshot = await getDocs(ngoQuery);
 
         const results = snapshot.docs.map((docSnap, index) => {
           const data = docSnap.data();
-
           return {
             id: docSnap.id,
-
             name: data.organisationName || "Unnamed NGO",
-
             abbrev: getInitials(data.organisationName),
-
             verified: !!data.profileCompleted,
-
             location: data.location || "Location not provided",
-
-            causes: data.targetCommunity
-              ? [data.targetCommunity]
-              : [],
-
-            description:
-              data.mission || "No mission statement provided yet.",
-
-            fundingNeed: data.fundingRequired
-              ? `R${data.fundingRequired}`
-              : "Not specified",
-
-            bgStyle: {
-              backgroundColor:
-                AVATAR_COLORS[index % AVATAR_COLORS.length],
-            },
-
+            causes: data.targetCommunity ? [data.targetCommunity] : [],
+            description: data.mission || "No mission statement provided yet.",
+            fundingNeed: data.fundingRequired ? `R${data.fundingRequired}` : "Not specified",
+            bgStyle: { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] },
             profileImageUrl: data.profileImageUrl || null,
-
             email: data.email || "Not provided",
-
-            about:
-              data.mission || "No further details provided yet.",
+            about: data.mission || "No further details provided yet.",
           };
         });
 
@@ -167,11 +175,6 @@ export default function SponsorDiscoverScreen({ navigation }) {
     });
   }, []);
 
-  // ====================================================
-  // FAVORITES
-  // ====================================================
-
-  // Load saved / interested NGOs from Firestore
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
@@ -190,43 +193,31 @@ export default function SponsorDiscoverScreen({ navigation }) {
       .catch((error) => console.log("Error loading interests:", error?.message));
   }, []);
 
+  // ====================================================
+  // ACTIONS
+  // ====================================================
+
   const toggleFavorite = async (id) => {
     const next = !favorites[id];
+    setFavorites((previous) => ({ ...previous, [id]: next }));
 
-    setFavorites((previous) => ({
-      ...previous,
-      [id]: next,
-    }));
-
-    // Organisation bookmarks use the existing interests collection; project hearts stay local.
     if (!ngos.some((ngo) => ngo.id === id)) return;
-
     try {
       await setSaved(id, next);
     } catch (error) {
-      setFavorites((previous) => ({
-        ...previous,
-        [id]: !next,
-      }));
+      setFavorites((previous) => ({ ...previous, [id]: !next }));
       Alert.alert("Could not save", error?.message || "Please try again.");
     }
   };
 
   const toggleInterest = async (id) => {
     const next = !interestedIds[id];
-
-    setInterestedIds((previous) => ({
-      ...previous,
-      [id]: next,
-    }));
+    setInterestedIds((previous) => ({ ...previous, [id]: next }));
 
     try {
       await setInterested(id, next);
     } catch (error) {
-      setInterestedIds((previous) => ({
-        ...previous,
-        [id]: !next,
-      }));
+      setInterestedIds((previous) => ({ ...previous, [id]: !next }));
       Alert.alert("Could not update interest", error?.message || "Please try again.");
     }
   };
@@ -239,99 +230,6 @@ export default function SponsorDiscoverScreen({ navigation }) {
     });
   };
 
-  // ====================================================
-  // FILTER ORGANISATIONS
-  // ====================================================
-
-  const filteredOrganisations = useMemo(() => {
-    const search = searchQuery.toLowerCase().trim();
-
-    return ngos.filter((org) => {
-      const matchesSearch =
-        org.name.toLowerCase().includes(search) ||
-        org.description.toLowerCase().includes(search) ||
-        org.causes.some((cause) =>
-          cause.toLowerCase().includes(search)
-        );
-
-      const matchesCause =
-        !selectedCause ||
-        org.causes.some(
-          (cause) =>
-            cause.toLowerCase() === selectedCause.toLowerCase()
-        );
-
-      const matchesLocation =
-        !selectedLocation ||
-        org.location
-          .toLowerCase()
-          .includes(selectedLocation.toLowerCase());
-
-      const matchesVerified =
-        !verifiedOnly || org.verified;
-
-      return (
-        matchesSearch &&
-        matchesCause &&
-        matchesLocation &&
-        matchesVerified
-      );
-    });
-  }, [
-    ngos,
-    searchQuery,
-    selectedCause,
-    selectedLocation,
-    verifiedOnly,
-  ]);
-
-  // ====================================================
-  // FILTER PROJECTS
-  // ====================================================
-
-  const filteredProjects = useMemo(() => {
-    const search = searchQuery.toLowerCase().trim();
-
-    return projects.filter((project) => {
-      const matchesSearch =
-        project.title.toLowerCase().includes(search) ||
-        project.description.toLowerCase().includes(search) ||
-        project.cause.toLowerCase().includes(search) ||
-        project.orgName.toLowerCase().includes(search);
-
-      const matchesCause =
-        !selectedCause ||
-        project.cause.toLowerCase() ===
-          selectedCause.toLowerCase();
-
-      const matchesLocation =
-        !selectedLocation ||
-        project.location
-          .toLowerCase()
-          .includes(selectedLocation.toLowerCase());
-
-      const matchesVerified =
-        !verifiedOnly || project.verified;
-
-      return (
-        matchesSearch &&
-        matchesCause &&
-        matchesLocation &&
-        matchesVerified
-      );
-    });
-  }, [
-    projects,
-    searchQuery,
-    selectedCause,
-    selectedLocation,
-    verifiedOnly,
-  ]);
-
-  // ====================================================
-  // CLEAR FILTERS
-  // ====================================================
-
   const clearFilters = () => {
     setSelectedCause("");
     setSelectedLocation("");
@@ -339,1172 +237,455 @@ export default function SponsorDiscoverScreen({ navigation }) {
   };
 
   // ====================================================
-  // UI
+  // FILTERING LOGIC
+  // ====================================================
+
+  const filteredOrganisations = useMemo(() => {
+    const search = searchQuery.toLowerCase().trim();
+    return ngos.filter((org) => {
+      const matchesSearch =
+        org.name.toLowerCase().includes(search) ||
+        org.description.toLowerCase().includes(search) ||
+        org.causes.some((cause) => cause.toLowerCase().includes(search));
+      const matchesCause = !selectedCause || org.causes.some((cause) => cause.toLowerCase() === selectedCause.toLowerCase());
+      const matchesLocation = !selectedLocation || org.location.toLowerCase().includes(selectedLocation.toLowerCase());
+      const matchesVerified = !verifiedOnly || org.verified;
+
+      return matchesSearch && matchesCause && matchesLocation && matchesVerified;
+    });
+  }, [ngos, searchQuery, selectedCause, selectedLocation, verifiedOnly]);
+
+  const filteredProjects = useMemo(() => {
+    const search = searchQuery.toLowerCase().trim();
+    return projects.filter((project) => {
+      const matchesSearch =
+        project.title.toLowerCase().includes(search) ||
+        project.description.toLowerCase().includes(search) ||
+        project.cause.toLowerCase().includes(search) ||
+        project.orgName.toLowerCase().includes(search);
+      const matchesCause = !selectedCause || project.cause.toLowerCase() === selectedCause.toLowerCase();
+      const matchesLocation = !selectedLocation || project.location.toLowerCase().includes(selectedLocation.toLowerCase());
+      const matchesVerified = !verifiedOnly || project.verified;
+
+      return matchesSearch && matchesCause && matchesLocation && matchesVerified;
+    });
+  }, [projects, searchQuery, selectedCause, selectedLocation, verifiedOnly]);
+
+  if (!fontsLoaded) return null;
+
+  // ====================================================
+  // UI RENDER
   // ====================================================
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
       <View style={styles.container}>
-
-        {/* ==============================================
-            HEADER
-        ============================================== */}
-
+        {/* HEADER */}
         <View style={styles.headerContainer}>
+          <Text style={styles.headerTitle}>Discover Impact</Text>
 
-          <Text style={styles.headerTitle}>
-            Discover Impact
-          </Text>
-
-          {/* SEARCH */}
-
+          {/* SEARCH & FILTER */}
           <View style={styles.searchRow}>
-
             <View style={styles.searchInputContainer}>
-
-              <Text style={styles.searchIcon}>
-                🔍
-              </Text>
-
+              <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search NGOs, projects or causes"
-                placeholderTextColor="#A0AEC0"
+                placeholderTextColor={COLORS.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
-
             </View>
 
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={() =>
-                setFilterModalVisible(true)
-              }
-            >
-              <Text style={styles.filterIcon}>
-                🎛️
-              </Text>
+            <TouchableOpacity style={styles.filterButton} onPress={() => setFilterModalVisible(true)}>
+              <Ionicons name="options-outline" size={22} color={COLORS.textPrimary} />
             </TouchableOpacity>
-
           </View>
 
           {/* TABS */}
-
           <View style={styles.tabContainer}>
-
             <TouchableOpacity
-              style={[
-                styles.tabButton,
-                activeTab === "Organisations" &&
-                  styles.activeTabButton,
-              ]}
-              onPress={() =>
-                setActiveTab("Organisations")
-              }
+              style={[styles.tabButton, activeTab === "Organisations" && styles.activeTabButton]}
+              onPress={() => setActiveTab("Organisations")}
+              activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "Organisations" &&
-                    styles.activeTabText,
-                ]}
-              >
+              <Text style={[styles.tabText, activeTab === "Organisations" && styles.activeTabText]}>
                 Organisations
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.tabButton,
-                activeTab === "Projects" &&
-                  styles.activeTabButton,
-              ]}
-              onPress={() =>
-                setActiveTab("Projects")
-              }
+              style={[styles.tabButton, activeTab === "Projects" && styles.activeTabButton]}
+              onPress={() => setActiveTab("Projects")}
+              activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "Projects" &&
-                    styles.activeTabText,
-                ]}
-              >
+              <Text style={[styles.tabText, activeTab === "Projects" && styles.activeTabText]}>
                 Projects
               </Text>
             </TouchableOpacity>
-
           </View>
-
         </View>
 
-        {/* ==============================================
-            LOADING
-        ============================================== */}
-
+        {/* LOADING STATE */}
         {activeTab === "Organisations" && loading ? (
-
           <View style={styles.loadingContainer}>
-            <ActivityIndicator
-              size="large"
-              color="#227B53"
-            />
+            <ActivityIndicator size="large" color={COLORS.buttonDark} />
           </View>
-
         ) : (
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-
-            {/* ==========================================
-                ORGANISATIONS
-            ========================================== */}
-
+            {/* ORGANISATIONS LIST */}
             {activeTab === "Organisations" && (
-
               filteredOrganisations.length === 0 ? (
-
                 <View style={styles.emptyState}>
-
                   <Text style={styles.emptyStateText}>
-                    {ngos.length === 0
-                      ? "No NGOs have signed up yet."
-                      : "No organisations match your search or filters."}
+                    {ngos.length === 0 ? "No NGOs have signed up yet." : "No organisations match your search or filters."}
                   </Text>
-
                 </View>
-
               ) : (
-
                 filteredOrganisations.map((org) => (
-
-                  <View
-                    key={org.id}
-                    style={styles.card}
-                  >
-
-                    {/* CARD HEADER */}
-
+                  <View key={org.id} style={styles.card}>
                     <View style={styles.cardHeader}>
-
                       {org.profileImageUrl ? (
-
-                        <Image
-                          source={{
-                            uri: org.profileImageUrl,
-                          }}
-                          style={styles.avatarImage}
-                        />
-
+                        <Image source={{ uri: org.profileImageUrl }} style={styles.avatarImage} />
                       ) : (
-
-                        <View
-                          style={[
-                            styles.avatar,
-                            org.bgStyle,
-                          ]}
-                        >
-                          <Text style={styles.avatarText}>
-                            {org.abbrev}
-                          </Text>
+                        <View style={[styles.avatar, org.bgStyle]}>
+                          <Text style={styles.avatarText}>{org.abbrev}</Text>
                         </View>
-
                       )}
 
                       <View style={styles.cardHeaderContent}>
-
-                        <Text style={styles.orgTitle}>
-                          {org.name}
-                        </Text>
-
-                        {org.verified && (
-
-                          <View style={styles.verifiedRow}>
-
-                            <Text
-                              style={styles.verifiedIcon}
-                            >
-                              ✓
-                            </Text>
-
-                            <Text
-                              style={styles.verifiedText}
-                            >
-                              Verified
-                            </Text>
-
-                          </View>
-
-                        )}
-
-                        <Text style={styles.locationText}>
-                          📍 {org.location}
-                        </Text>
-
+                        <View style={styles.orgNameRow}>
+                          <Text style={styles.orgTitle} numberOfLines={1}>{org.name}</Text>
+                          {org.verified && <Ionicons name="checkmark-circle" size={16} color={COLORS.emerald} style={styles.verifiedIcon} />}
+                        </View>
+                        <View style={styles.locationRow}>
+                          <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
+                          <Text style={styles.locationText}>{org.location}</Text>
+                        </View>
                       </View>
-
                     </View>
-
-                    {/* CAUSES */}
 
                     {org.causes.length > 0 && (
-
                       <View style={styles.chipRow}>
-
-                        {org.causes.map(
-                          (cause, index) => (
-
-                            <View
-                              key={index}
-                              style={[
-                                styles.chip,
-                                index % 2 === 0
-                                  ? styles.chipBlue
-                                  : styles.chipYellow,
-                              ]}
-                            >
-
-                              <Text
-                                style={[
-                                  styles.chipText,
-                                  index % 2 === 0
-                                    ? styles.chipBlueText
-                                    : styles.chipYellowText,
-                                ]}
-                              >
-                                {cause}
-                              </Text>
-
-                            </View>
-
-                          )
-                        )}
-
+                        {org.causes.map((cause, index) => (
+                          <View key={index} style={styles.chip}>
+                            <Text style={styles.chipText}>{cause}</Text>
+                          </View>
+                        ))}
                       </View>
-
                     )}
 
-                    {/* DESCRIPTION */}
-
-                    <Text
-                      style={styles.descriptionText}
-                      numberOfLines={2}
-                    >
-                      {org.description}
-                    </Text>
-
-                    {/* FUNDING */}
+                    <Text style={styles.descriptionText} numberOfLines={2}>{org.description}</Text>
 
                     <Text style={styles.fundingText}>
-                      Funding Need:{" "}
-                      <Text style={styles.fundingHighlight}>
-                        {org.fundingNeed}
-                      </Text>
+                      Funding Need: <Text style={styles.fundingHighlight}>{org.fundingNeed}</Text>
                     </Text>
 
-                    {/* ACTIONS */}
-
                     <View style={styles.cardActionRow}>
-
-                      <TouchableOpacity
-                        style={styles.primaryButton}
-                        onPress={() =>
-                          setSelectedOrg(org)
-                        }
-                      >
-                        <Text
-                          style={styles.primaryButtonText}
-                        >
-                          View Profile
-                        </Text>
+                      <TouchableOpacity style={styles.primaryButton} onPress={() => setSelectedOrg(org)} activeOpacity={0.85}>
+                        <Text style={styles.primaryButtonText}>View Profile</Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={styles.favoriteButton}
-                        onPress={() =>
-                          toggleFavorite(org.id)
-                        }
-                      >
-                        <Text style={styles.heartIcon}>
-                          {favorites[org.id]
-                            ? "❤️"
-                            : "🤍"}
-                        </Text>
+                      <TouchableOpacity style={styles.favoriteButton} onPress={() => toggleFavorite(org.id)} activeOpacity={0.7}>
+                        <Ionicons 
+                          name={favorites[org.id] ? "heart" : "heart-outline"} 
+                          size={24} 
+                          color={favorites[org.id] ? COLORS.danger : COLORS.textPrimary} 
+                        />
                       </TouchableOpacity>
-
                     </View>
-
                   </View>
-
                 ))
-
               )
-
             )}
 
-            {/* ==========================================
-                PROJECTS
-            ========================================== */}
-
+            {/* PROJECTS LIST */}
             {activeTab === "Projects" && (
               projectsLoading ? (
-                <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#227B53" /></View>
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={COLORS.buttonDark} />
+                </View>
               ) : filteredProjects.length === 0 ? (
-
                 <View style={styles.emptyState}>
-
                   <Text style={styles.emptyStateText}>
                     {projects.length === 0 ? "No projects have been published yet." : "No projects match your search or filters."}
                   </Text>
-
                 </View>
-
               ) : (
-
                 filteredProjects.map((project) => (
-
-                  <View
-                    key={project.id}
-                    style={styles.card}
-                  >
-
-                    {/* PROJECT IMAGE */}
-
-                    <View
-                      style={
-                        styles.projectImageContainer
-                      }
-                    >
-
+                  <View key={project.id} style={styles.card}>
+                    <View style={styles.projectImageContainer}>
                       {project.image ? (
                         <Image source={{ uri: project.image }} style={styles.projectImage} />
                       ) : (
                         <View style={[styles.projectImage, styles.projectImagePlaceholder]}>
-                          <Ionicons name="leaf-outline" size={34} color="#FFFFFF" />
+                          <Ionicons name="leaf-outline" size={42} color={COLORS.white} />
                         </View>
                       )}
-
-                      <View
-                        style={styles.projectImageChip}
-                      >
-                        <View
-                          style={[
-                            styles.chip,
-                            styles.chipBlue,
-                          ]}
-                        >
-                          <Text
-                            style={styles.chipBlueText}
-                          >
-                            {project.cause}
-                          </Text>
+                      <View style={styles.projectImageChip}>
+                        <View style={styles.chipActive}>
+                          <Text style={styles.chipActiveText}>{project.cause}</Text>
                         </View>
                       </View>
-
                     </View>
 
-                    {/* PROJECT TITLE */}
-
-                    <Text style={styles.projectTitle}>
-                      {project.title}
-                    </Text>
-
-                    <Text
-                      style={styles.projectSubTitle}
-                    >
-                      {project.orgName} •{" "}
-                      {project.location}
-                    </Text>
-
-                    {/* DESCRIPTION */}
-
-                    <Text
-                      style={styles.descriptionText}
-                      numberOfLines={2}
-                    >
-                      {project.description}
-                    </Text>
-
+                    <Text style={styles.projectTitle}>{project.title}</Text>
+                    <Text style={styles.projectSubTitle}>{project.orgName} • {project.location}</Text>
+                    <Text style={styles.descriptionText} numberOfLines={2}>{project.description}</Text>
+                    
                     <Text style={styles.projectFundingTarget}>
-                      Funding target: R{Number(project.fundingGoal || 0).toLocaleString("en-ZA")}
+                      Target: R{Number(project.fundingGoal || 0).toLocaleString("en-ZA")}
                     </Text>
 
-                    {/* ACTIONS */}
-
-                    <View
-                      style={styles.cardActionRow}
-                    >
-
-                      <TouchableOpacity
-                        style={styles.primaryButton}
-                        onPress={() =>
-                          setSelectedProject(project)
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.primaryButtonText
-                          }
-                        >
-                          View Project
-                        </Text>
+                    <View style={styles.cardActionRow}>
+                      <TouchableOpacity style={styles.primaryButton} onPress={() => setSelectedProject(project)} activeOpacity={0.85}>
+                        <Text style={styles.primaryButtonText}>View Project</Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={styles.favoriteButton}
-                        onPress={() =>
-                          toggleFavorite(project.id)
-                        }
-                      >
-                        <Text style={styles.heartIcon}>
-                          {favorites[project.id]
-                            ? "❤️"
-                            : "🤍"}
-                        </Text>
+                      <TouchableOpacity style={styles.favoriteButton} onPress={() => toggleFavorite(project.id)} activeOpacity={0.7}>
+                        <Ionicons 
+                          name={favorites[project.id] ? "heart" : "heart-outline"} 
+                          size={24} 
+                          color={favorites[project.id] ? COLORS.danger : COLORS.textPrimary} 
+                        />
                       </TouchableOpacity>
-
                     </View>
-
                   </View>
-
                 ))
-
               )
-
             )}
-
           </ScrollView>
-
         )}
 
         {/* ==============================================
             FILTER MODAL
         ============================================== */}
-
-        <Modal
-          visible={isFilterModalVisible}
-          animationType="slide"
-          transparent
-        >
-
+        <Modal visible={isFilterModalVisible} animationType="fade" transparent>
           <View style={styles.modalOverlay}>
-
-            <View
-              style={styles.filterModalContainer}
-            >
-
+            <View style={styles.filterModalContainer}>
               <View style={styles.modalHeader}>
-
-                <Text style={styles.modalTitle}>
-                  Filter
-                </Text>
-
-                <TouchableOpacity
-                  onPress={() =>
-                    setFilterModalVisible(false)
-                  }
-                >
-                  <Text style={styles.closeIcon}>
-                    ✕
-                  </Text>
+                <Text style={styles.modalTitle}>Filters</Text>
+                <TouchableOpacity onPress={() => setFilterModalVisible(false)} activeOpacity={0.7}>
+                  <Ionicons name="close" size={24} color={COLORS.textPrimary} />
                 </TouchableOpacity>
-
               </View>
 
-              <ScrollView style={styles.modalBody}>
-
-                {/* CAUSE */}
-
-                <Text
-                  style={styles.filterSectionTitle}
-                >
-                  Cause
-                </Text>
-
-                <View
-                  style={
-                    styles.filterChipContainer
-                  }
-                >
-
-                  {[
-                    "Education",
-                    "Healthcare",
-                    "Environment",
-                    "Youth Development",
-                    "Food Security",
-                  ].map((cause) => (
-
+              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                <Text style={styles.filterSectionTitle}>Cause</Text>
+                <View style={styles.filterChipContainer}>
+                  {["Education", "Healthcare", "Environment", "Youth Development", "Food Security"].map((cause) => (
                     <TouchableOpacity
                       key={cause}
-                      style={[
-                        styles.filterChip,
-                        selectedCause === cause &&
-                          styles.activeFilterChip,
-                      ]}
-                      onPress={() =>
-                        setSelectedCause(
-                          selectedCause === cause
-                            ? ""
-                            : cause
-                        )
-                      }
+                      style={[styles.filterChip, selectedCause === cause && styles.activeFilterChip]}
+                      onPress={() => setSelectedCause(selectedCause === cause ? "" : cause)}
+                      activeOpacity={0.7}
                     >
-
-                      <Text
-                        style={[
-                          styles.filterChipText,
-                          selectedCause === cause &&
-                            styles.activeFilterChipText,
-                        ]}
-                      >
+                      <Text style={[styles.filterChipText, selectedCause === cause && styles.activeFilterChipText]}>
                         {cause}
                       </Text>
-
                     </TouchableOpacity>
-
                   ))}
-
                 </View>
 
-                {/* LOCATION */}
-
-                <Text
-                  style={styles.filterSectionTitle}
-                >
-                  Location
-                </Text>
-
-                <View
-                  style={
-                    styles.filterChipContainer
-                  }
-                >
-
-                  {[
-                    "South Africa",
-                    "Kenya",
-                    "Nigeria",
-                    "Zambia",
-                    "Uganda",
-                  ].map((location) => (
-
+                <Text style={styles.filterSectionTitle}>Location</Text>
+                <View style={styles.filterChipContainer}>
+                  {["South Africa", "Kenya", "Nigeria", "Zambia", "Uganda"].map((location) => (
                     <TouchableOpacity
                       key={location}
-                      style={[
-                        styles.filterChip,
-                        selectedLocation === location &&
-                          styles.activeFilterChip,
-                      ]}
-                      onPress={() =>
-                        setSelectedLocation(
-                          selectedLocation === location
-                            ? ""
-                            : location
-                        )
-                      }
+                      style={[styles.filterChip, selectedLocation === location && styles.activeFilterChip]}
+                      onPress={() => setSelectedLocation(selectedLocation === location ? "" : location)}
+                      activeOpacity={0.7}
                     >
-
-                      <Text
-                        style={[
-                          styles.filterChipText,
-                          selectedLocation === location &&
-                            styles.activeFilterChipText,
-                        ]}
-                      >
+                      <Text style={[styles.filterChipText, selectedLocation === location && styles.activeFilterChipText]}>
                         {location}
                       </Text>
-
                     </TouchableOpacity>
-
                   ))}
-
                 </View>
 
-                {/* VERIFICATION */}
-
-                <Text
-                  style={styles.filterSectionTitle}
-                >
-                  Verification Status
-                </Text>
-
-                <View
-                  style={
-                    styles.filterChipContainer
-                  }
-                >
-
+                <Text style={styles.filterSectionTitle}>Verification Status</Text>
+                <View style={styles.filterChipContainer}>
                   <TouchableOpacity
-                    style={[
-                      styles.filterChip,
-                      !verifiedOnly &&
-                        styles.activeFilterChip,
-                    ]}
-                    onPress={() =>
-                      setVerifiedOnly(false)
-                    }
+                    style={[styles.filterChip, !verifiedOnly && styles.activeFilterChip]}
+                    onPress={() => setVerifiedOnly(false)}
+                    activeOpacity={0.7}
                   >
-
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        !verifiedOnly &&
-                          styles.activeFilterChipText,
-                      ]}
-                    >
-                      All
-                    </Text>
-
+                    <Text style={[styles.filterChipText, !verifiedOnly && styles.activeFilterChipText]}>All</Text>
                   </TouchableOpacity>
-
                   <TouchableOpacity
-                    style={[
-                      styles.filterChip,
-                      verifiedOnly &&
-                        styles.activeFilterChip,
-                    ]}
-                    onPress={() =>
-                      setVerifiedOnly(true)
-                    }
+                    style={[styles.filterChip, verifiedOnly && styles.activeFilterChip]}
+                    onPress={() => setVerifiedOnly(true)}
+                    activeOpacity={0.7}
                   >
-
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        verifiedOnly &&
-                          styles.activeFilterChipText,
-                      ]}
-                    >
-                      Verified Only
-                    </Text>
-
+                    <Text style={[styles.filterChipText, verifiedOnly && styles.activeFilterChipText]}>Verified Only</Text>
                   </TouchableOpacity>
-
                 </View>
-
               </ScrollView>
 
-              {/* FOOTER */}
-
               <View style={styles.modalFooter}>
-
-                <TouchableOpacity
-                  style={styles.clearButton}
-                  onPress={clearFilters}
-                >
-                  <Text
-                    style={styles.clearButtonText}
-                  >
-                    Clear All
-                  </Text>
+                <TouchableOpacity style={styles.clearButton} onPress={clearFilters} activeOpacity={0.7}>
+                  <Text style={styles.clearButtonText}>Clear All</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.applyButton}
-                  onPress={() =>
-                    setFilterModalVisible(false)
-                  }
-                >
-                  <Text
-                    style={styles.applyButtonText}
-                  >
-                    Apply Filters
-                  </Text>
+                <TouchableOpacity style={styles.applyButton} onPress={() => setFilterModalVisible(false)} activeOpacity={0.85}>
+                  <Text style={styles.applyButtonText}>Apply Filters</Text>
                 </TouchableOpacity>
-
               </View>
-
             </View>
-
           </View>
-
         </Modal>
 
         {/* ==============================================
             ORGANISATION DETAIL MODAL
         ============================================== */}
-
         {selectedOrg && (
-
-          <Modal
-            visible
-            animationType="slide"
-          >
-
-            <SafeAreaView
-              style={styles.detailSafeArea}
-            >
-
-              <ScrollView>
-
-                {/* NAV */}
-
-                <View
-                  style={styles.detailHeaderNav}
-                >
-
-                  <TouchableOpacity
-                    onPress={() =>
-                      setSelectedOrg(null)
-                    }
-                  >
-                    <Text style={styles.backButton}>
-                      ‹
-                    </Text>
+          <Modal visible animationType="slide">
+            <SafeAreaView style={styles.detailSafeArea}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.detailHeaderNav}>
+                  <TouchableOpacity onPress={() => setSelectedOrg(null)} style={styles.modalBackButton}>
+                    <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
                   </TouchableOpacity>
-
-                  <Text
-                    style={styles.detailNavTitle}
-                  >
-                    Organisation
-                  </Text>
-
-                  <TouchableOpacity
-                    onPress={() =>
-                      toggleFavorite(
-                        selectedOrg.id
-                      )
-                    }
-                  >
-                    <Text style={styles.heartIcon}>
-                      {favorites[selectedOrg.id]
-                        ? "❤️"
-                        : "🤍"}
-                    </Text>
-                  </TouchableOpacity>
-
-                </View>
-
-                {/* BANNER */}
-
-                <View
-                  style={styles.detailBanner}
-                >
-
-                  <Image
-                    source={{
-                      uri: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=800&auto=format&fit=crop",
-                    }}
-                    style={
-                      styles.detailBannerImage
-                    }
-                  />
-
-                  {selectedOrg.profileImageUrl ? (
-
-                    <Image
-                      source={{
-                        uri:
-                          selectedOrg.profileImageUrl,
-                      }}
-                      style={
-                        styles.detailAvatarImage
-                      }
+                  <Text style={styles.detailNavTitle}>Organisation</Text>
+                  <TouchableOpacity onPress={() => toggleFavorite(selectedOrg.id)} style={styles.modalHeartButton}>
+                    <Ionicons 
+                      name={favorites[selectedOrg.id] ? "heart" : "heart-outline"} 
+                      size={24} 
+                      color={favorites[selectedOrg.id] ? COLORS.danger : COLORS.textPrimary} 
                     />
-
-                  ) : (
-
-                    <View
-                      style={[
-                        styles.detailAvatar,
-                        selectedOrg.bgStyle,
-                      ]}
-                    >
-                      <Text
-                        style={
-                          styles.detailAvatarText
-                        }
-                      >
-                        {selectedOrg.abbrev}
-                      </Text>
-                    </View>
-
-                  )}
-
+                  </TouchableOpacity>
                 </View>
 
-                {/* CONTENT */}
+                <View style={styles.detailBanner}>
+                  <Image source={{ uri: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=800&auto=format&fit=crop" }} style={styles.detailBannerImage} />
+                  {selectedOrg.profileImageUrl ? (
+                    <Image source={{ uri: selectedOrg.profileImageUrl }} style={styles.detailAvatarImage} />
+                  ) : (
+                    <View style={[styles.detailAvatar, selectedOrg.bgStyle]}>
+                      <Text style={styles.detailAvatarText}>{selectedOrg.abbrev}</Text>
+                    </View>
+                  )}
+                </View>
 
-                <View
-                  style={styles.detailContent}
-                >
-
-                  <Text
-                    style={styles.detailTitle}
-                  >
-                    {selectedOrg.name}
-                  </Text>
-
-                  <View
-                    style={styles.detailSubRow}
-                  >
-
-                    <Text
-                      style={styles.detailStatus}
-                    >
-                      {selectedOrg.verified
-                        ? "✓ Verified"
-                        : "Not yet verified"}{" "}
-                      • {selectedOrg.location}
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailTitle}>{selectedOrg.name}</Text>
+                  <View style={styles.detailSubRow}>
+                    <Text style={styles.detailStatus}>
+                      {selectedOrg.verified ? "Verified" : "Unverified"} • {selectedOrg.location}
                     </Text>
-
                   </View>
 
-                  {/* EXPRESS INTEREST */}
-
                   <TouchableOpacity
-                    style={[
-                      styles.expressInterestButton,
-                      interestedIds[selectedOrg.id] && {
-                        backgroundColor: "#64748B",
-                      },
-                    ]}
-                    onPress={() =>
-                      toggleInterest(selectedOrg.id)
-                    }
+                    style={[styles.expressInterestButton, interestedIds[selectedOrg.id] && { backgroundColor: COLORS.textSecondary }]}
+                    onPress={() => toggleInterest(selectedOrg.id)}
+                    activeOpacity={0.85}
                   >
-                    <Text
-                      style={
-                        styles.primaryButtonText
-                      }
-                    >
-                      {interestedIds[selectedOrg.id]
-                        ? "Interest Sent ✓ (tap to withdraw)"
-                        : "Express Interest"}
+                    <Text style={styles.primaryButtonText}>
+                      {interestedIds[selectedOrg.id] ? "Interest Sent ✓" : "Express Interest"}
                     </Text>
                   </TouchableOpacity>
 
-                  {/* CONTACT */}
+                  <Text style={styles.sectionHeader}>Contact</Text>
+                  <Text style={styles.bodyText}>{selectedOrg.email}</Text>
 
-                  <Text
-                    style={styles.sectionHeader}
-                  >
-                    Contact
-                  </Text>
+                  <Text style={styles.sectionHeader}>Mission</Text>
+                  <Text style={styles.bodyText}>{selectedOrg.about}</Text>
 
-                  <Text
-                    style={styles.bodyText}
-                  >
-                    {selectedOrg.email}
-                  </Text>
-
-                  {/* MISSION */}
-
-                  <Text
-                    style={styles.sectionHeader}
-                  >
-                    Mission
-                  </Text>
-
-                  <Text
-                    style={styles.bodyText}
-                  >
-                    {selectedOrg.about}
-                  </Text>
-
-                  {/* FUNDING */}
-
-                  <Text
-                    style={styles.sectionHeader}
-                  >
-                    Funding Need
-                  </Text>
-
-                  <Text
-                    style={styles.bodyText}
-                  >
-                    {selectedOrg.fundingNeed}
-                  </Text>
-
-                  {/* COMMUNITY */}
+                  <Text style={styles.sectionHeader}>Funding Need</Text>
+                  <Text style={styles.bodyText}>{selectedOrg.fundingNeed}</Text>
 
                   {selectedOrg.causes.length > 0 && (
-
                     <>
-
-                      <Text
-                        style={styles.sectionHeader}
-                      >
-                        Community Served
-                      </Text>
-
-                      <View
-                        style={styles.chipRow}
-                      >
-
-                        {selectedOrg.causes.map(
-                          (cause, index) => (
-
-                            <View
-                              key={index}
-                              style={[
-                                styles.chip,
-                                styles.chipGreen,
-                              ]}
-                            >
-
-                              <Text
-                                style={
-                                  styles.chipGreenText
-                                }
-                              >
-                                {cause}
-                              </Text>
-
-                            </View>
-
-                          )
-                        )}
-
+                      <Text style={styles.sectionHeader}>Community Served</Text>
+                      <View style={styles.chipRow}>
+                        {selectedOrg.causes.map((cause, index) => (
+                          <View key={index} style={[styles.chip, styles.chipActive]}>
+                            <Text style={styles.chipActiveText}>{cause}</Text>
+                          </View>
+                        ))}
                       </View>
-
                     </>
-
                   )}
-
                 </View>
-
               </ScrollView>
-
             </SafeAreaView>
-
           </Modal>
-
         )}
 
         {/* ==============================================
             PROJECT DETAIL MODAL
         ============================================== */}
-
         {selectedProject && (
-
-          <Modal
-            visible
-            animationType="slide"
-          >
-
-            <SafeAreaView
-              style={styles.detailSafeArea}
-            >
-
-              <ScrollView>
-
-                {/* NAV */}
-
-                <View
-                  style={styles.detailHeaderNav}
-                >
-
-                  <TouchableOpacity
-                    onPress={() =>
-                      setSelectedProject(null)
-                    }
-                  >
-                    <Text style={styles.backButton}>
-                      ‹
-                    </Text>
+          <Modal visible animationType="slide">
+            <SafeAreaView style={styles.detailSafeArea}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.detailHeaderNav}>
+                  <TouchableOpacity onPress={() => setSelectedProject(null)} style={styles.modalBackButton}>
+                    <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
                   </TouchableOpacity>
-
-                  <Text
-                    style={styles.detailNavTitle}
-                  >
-                    Project Details
-                  </Text>
-
+                  <Text style={styles.detailNavTitle}>Project Details</Text>
                   <View style={styles.projectTypeBadge}><Text style={styles.projectTypeBadgeText}>Project</Text></View>
-
                 </View>
 
-                {/* PROJECT IMAGE */}
-
-                <View
-                  style={
-                    styles.projectDetailBanner
-                  }
-                >
-
+                <View style={styles.projectDetailBanner}>
                   {selectedProject.image ? (
                     <Image source={{ uri: selectedProject.image }} style={styles.projectDetailImage} />
                   ) : (
                     <View style={[styles.projectDetailImage, styles.projectImagePlaceholder]}>
-                      <Ionicons name="leaf-outline" size={42} color="#FFFFFF" />
+                      <Ionicons name="leaf-outline" size={48} color={COLORS.white} />
                     </View>
                   )}
-
-                  <View
-                    style={
-                      styles.projectDetailOverlay
-                    }
-                  >
-
-                    <View
-                      style={[
-                        styles.chip,
-                        styles.chipBlue,
-                      ]}
-                    >
-                      <Text
-                        style={
-                          styles.chipBlueText
-                        }
-                      >
-                        {selectedProject.cause}
-                      </Text>
+                  <View style={styles.projectDetailOverlay}>
+                    <View style={[styles.chip, styles.chipActive]}>
+                      <Text style={styles.chipActiveText}>{selectedProject.cause}</Text>
                     </View>
-
-                    <Text
-                      style={
-                        styles.projectDetailBannerTitle
-                      }
-                    >
-                      {selectedProject.title}
+                    <Text style={styles.projectDetailBannerTitle}>{selectedProject.title}</Text>
+                    <Text style={styles.projectDetailBannerSub}>
+                      {selectedProject.orgName}{selectedProject.verified ? " • Verified" : ""}
                     </Text>
-
-                    <Text
-                      style={
-                        styles.projectDetailBannerSub
-                      }
-                    >
-                      {selectedProject.orgName}{selectedProject.verified ? " · Verified organisation" : ""}
-                    </Text>
-
                   </View>
-
                 </View>
 
-                {/* CONTENT */}
-
-                <View
-                  style={styles.detailContent}
-                >
-
+                <View style={styles.detailContent}>
                   <View style={styles.fundingCard}>
-                    <Text style={styles.fundingStatGreen}>
-                      R{Number(selectedProject.fundingGoal || 0).toLocaleString("en-ZA")}
-                    </Text>
+                    <Text style={styles.fundingStatGreen}>R{Number(selectedProject.fundingGoal || 0).toLocaleString("en-ZA")}</Text>
                     <Text style={styles.statLabel}>Funding target</Text>
                   </View>
 
-                  {/* OVERVIEW */}
-
-                  <Text
-                    style={styles.sectionHeader}
-                  >
-                    Project Overview
-                  </Text>
-
-                  <Text
-                    style={styles.bodyText}
-                  >
-                    {selectedProject.description}
-                  </Text>
-
-                  {/* INFO */}
+                  <Text style={styles.sectionHeader}>Project Overview</Text>
+                  <Text style={styles.bodyText}>{selectedProject.description}</Text>
 
                   <View style={styles.infoTable}>
-
-                    <View
-                      style={styles.infoTableRow}
-                    >
-                      <Text
-                        style={
-                          styles.infoTableLabel
-                        }
-                      >
-                        Location
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.infoTableValue
-                        }
-                      >
-                        {selectedProject.location}
-                      </Text>
+                    <View style={styles.infoTableRow}>
+                      <Text style={styles.infoTableLabel}>Location</Text>
+                      <Text style={styles.infoTableValue}>{selectedProject.location}</Text>
                     </View>
-
-                    <View
-                      style={styles.infoTableRow}
-                    >
-                      <Text
-                        style={
-                          styles.infoTableLabel
-                        }
-                      >
-                        Beneficiaries
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.infoTableValue
-                        }
-                      >
-                        {selectedProject.beneficiaries}
-                      </Text>
+                    <View style={styles.infoTableRow}>
+                      <Text style={styles.infoTableLabel}>Beneficiaries</Text>
+                      <Text style={styles.infoTableValue}>{selectedProject.beneficiaries}</Text>
                     </View>
-
-                    <View
-                      style={styles.infoTableRow}
-                    >
-                      <Text
-                        style={
-                          styles.infoTableLabel
-                        }
-                      >
-                        Deadline
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.infoTableValue
-                        }
-                      >
-                        {selectedProject.deadline}
-                      </Text>
+                    <View style={styles.infoTableRow}>
+                      <Text style={styles.infoTableLabel}>Deadline</Text>
+                      <Text style={styles.infoTableValue}>{selectedProject.deadline}</Text>
                     </View>
-
-
-
                   </View>
 
-                  {/* ACTIONS */}
-
-                  <View
-                    style={styles.projectActionRow}
-                  >
-
+                  <View style={styles.projectActionRow}>
                     <TouchableOpacity
                       style={styles.contactNgoButton}
                       onPress={() => contactProjectOrganisation(selectedProject)}
+                      activeOpacity={0.7}
                     >
-                      <Text
-                        style={
-                          styles.contactNgoText
-                        }
-                      >
-                        Contact organisation
-                      </Text>
+                      <Text style={styles.contactNgoText}>Contact Organisation</Text>
                     </TouchableOpacity>
-
-
                   </View>
-
                 </View>
-
               </ScrollView>
-
             </SafeAreaView>
-
           </Modal>
-
         )}
-
       </View>
     </SafeAreaView>
   );
@@ -1515,783 +696,614 @@ export default function SponsorDiscoverScreen({ navigation }) {
 // ======================================================
 
 const styles = StyleSheet.create({
-
   safeArea: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.background,
   },
-
   detailSafeArea: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.background,
   },
-
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
   },
 
-  // ----------------------------------------------------
   // LOADING / EMPTY
-  // ----------------------------------------------------
-
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 40,
+    paddingVertical: 60,
   },
-
   emptyStateText: {
-    fontSize: 14,
-    color: "#64748B",
+    fontFamily: "Manrope_500Medium",
+    fontSize: 15,
+    color: COLORS.textSecondary,
     textAlign: "center",
   },
 
-  // ----------------------------------------------------
   // HEADER
-  // ----------------------------------------------------
-
   headerContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 10,
+    backgroundColor: COLORS.background,
   },
-
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 12,
+    fontFamily: "Manrope_700Bold",
+    fontSize: 28,
+    color: COLORS.textPrimary,
+    marginBottom: 16,
+    letterSpacing: -0.5,
   },
-
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 20,
   },
-
   searchInputContainer: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16, // Pill-ish
+    paddingHorizontal: 16,
+    height: 52,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...softShadow,
   },
-
   searchIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    marginRight: 10,
   },
-
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    color: "#0F172A",
+    fontFamily: "Manrope_500Medium",
+    fontSize: 15,
+    color: COLORS.textPrimary,
   },
-
   filterButton: {
-    marginLeft: 8,
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    marginLeft: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: COLORS.border,
     justifyContent: "center",
     alignItems: "center",
+    ...softShadow,
   },
 
-  filterIcon: {
-    fontSize: 18,
-  },
-
-  // ----------------------------------------------------
   // TABS
-  // ----------------------------------------------------
-
   tabContainer: {
     flexDirection: "row",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 12,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 16,
+    padding: 6,
+    marginBottom: 8,
   },
-
   tabButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 12,
   },
-
   activeTabButton: {
-    backgroundColor: "#FFFFFF",
-    elevation: 2,
+    backgroundColor: COLORS.surface,
+    ...softShadow,
   },
-
   tabText: {
+    fontFamily: "Manrope_600SemiBold",
     fontSize: 14,
-    color: "#64748B",
-    fontWeight: "600",
+    color: COLORS.textSecondary,
   },
-
   activeTabText: {
-    color: "#0F172A",
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.buttonDark,
   },
 
-  // ----------------------------------------------------
   // LIST
-  // ----------------------------------------------------
-
   scrollContent: {
-    padding: 16,
+    padding: 24,
     paddingBottom: 112,
   },
 
-  // ----------------------------------------------------
   // CARD
-  // ----------------------------------------------------
-
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: COLORS.border,
+    ...softShadow,
   },
-
   cardHeader: {
     flexDirection: "row",
-    marginBottom: 12,
+    marginBottom: 14,
   },
-
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 14,
   },
-
   avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    marginRight: 14,
   },
-
   avatarText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 14,
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.white,
+    fontSize: 16,
   },
-
   cardHeaderContent: {
     flex: 1,
+    justifyContent: "center",
   },
-
-  orgTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-
-  locationText: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-  },
-
-  verifiedRow: {
+  orgNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 2,
   },
-
+  orgTitle: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 18,
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
   verifiedIcon: {
-    fontSize: 10,
-    color: "#166534",
-    backgroundColor: "#DCFCE7",
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    marginRight: 4,
+    marginLeft: 6,
+    marginBottom: 4,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  locationText: {
+    fontFamily: "Manrope_500Medium",
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginLeft: 4,
   },
 
-  verifiedText: {
-    fontSize: 12,
-    color: "#166534",
-    fontWeight: "500",
-  },
-
-  // ----------------------------------------------------
   // CHIPS
-  // ----------------------------------------------------
-
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginVertical: 8,
+    marginBottom: 12,
   },
-
   chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
-    marginRight: 6,
-    marginBottom: 6,
-  },
-
-  chipText: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-
-  chipBlue: {
-    backgroundColor: "#E0F2FE",
-  },
-
-  chipBlueText: {
-    color: "#0369A1",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-
-  chipYellow: {
-    backgroundColor: "#FEF3C7",
-  },
-
-  chipYellowText: {
-    color: "#B45309",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-
-  chipGreen: {
-    backgroundColor: "#DCFCE7",
-  },
-
-  chipGreenText: {
-    color: "#15803D",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-
-  // ----------------------------------------------------
-  // TEXT
-  // ----------------------------------------------------
-
-  descriptionText: {
-    fontSize: 13,
-    color: "#475569",
-    lineHeight: 18,
+    marginRight: 8,
     marginBottom: 8,
   },
-
-  fundingText: {
+  chipText: {
+    fontFamily: "Manrope_600SemiBold",
     fontSize: 12,
-    color: "#0F172A",
-    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
+  chipActive: {
+    backgroundColor: COLORS.buttonDarkSoft,
+    borderColor: "transparent",
+  },
+  chipActiveText: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 12,
+    color: COLORS.buttonDark,
   },
 
+  // TEXT
+  descriptionText: {
+    fontFamily: "Manrope_400Regular",
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  fundingText: {
+    fontFamily: "Manrope_500Medium",
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
   fundingHighlight: {
-    color: "#0F172A",
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.buttonDark,
   },
 
-  // ----------------------------------------------------
   // BUTTONS
-  // ----------------------------------------------------
-
   cardActionRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
+    marginTop: 16,
   },
-
   primaryButton: {
     flex: 1,
-    backgroundColor: "#227B53",
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: COLORS.buttonDark,
+    paddingVertical: 16,
+    borderRadius: 30, // Luxury pill shape
     alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.buttonDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-
   primaryButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 14,
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.white,
+    fontSize: 15,
+    letterSpacing: 0.5,
   },
-
   favoriteButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 8,
+    marginLeft: 12,
+    backgroundColor: COLORS.surface,
   },
 
-  heartIcon: {
-    fontSize: 18,
-  },
-
-  // ----------------------------------------------------
-  // MATCH
-  // ----------------------------------------------------
-
-  matchBadge: {
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-
-  matchBadgeText: {
-    color: "#15803D",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
-  // ----------------------------------------------------
   // PROJECTS
-  // ----------------------------------------------------
-
   projectImageContainer: {
-    height: 140,
-    borderRadius: 12,
+    height: 160,
+    borderRadius: 16,
     overflow: "hidden",
-    marginBottom: 12,
+    marginBottom: 16,
     position: "relative",
   },
-
   projectImage: {
     width: "100%",
     height: "100%",
   },
-  projectImagePlaceholder: { backgroundColor: "#2A9D8F", alignItems: "center", justifyContent: "center" },
-  projectFundingTarget: { fontSize: 13, fontWeight: "700", color: "#227B53", marginTop: 4, marginBottom: 10 },
-  projectTypeBadge: { backgroundColor: "#E8F5EE", borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 },
-  projectTypeBadgeText: { fontSize: 11, fontWeight: "700", color: "#227B53" },
-
-  projectImageChip: {
-    position: "absolute",
-    top: 10,
-    left: 10,
+  projectImagePlaceholder: { 
+    backgroundColor: COLORS.buttonDark, 
+    alignItems: "center", 
+    justifyContent: "center" 
   },
-
-  projectMatchBadge: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-  },
-
   projectTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-
-  projectSubTitle: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-    marginBottom: 8,
-  },
-
-  progressBarContainer: {
-    height: 6,
-    backgroundColor: "#E2E8F0",
-    borderRadius: 3,
-    marginVertical: 6,
-    overflow: "hidden",
-  },
-
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#227B53",
-  },
-
-  progressLabelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    fontFamily: "Manrope_700Bold",
+    fontSize: 18,
+    color: COLORS.textPrimary,
     marginBottom: 4,
   },
-
-  progressTextGreen: {
-    fontSize: 12,
-    color: "#227B53",
-    fontWeight: "600",
+  projectSubTitle: {
+    fontFamily: "Manrope_500Medium",
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginBottom: 12,
+  },
+  projectFundingTarget: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 15, 
+    color: COLORS.emerald, 
+    marginTop: 4, 
+    marginBottom: 4 
+  },
+  projectImageChip: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+  },
+  projectTypeBadge: { 
+    backgroundColor: COLORS.emeraldSoft, 
+    borderRadius: 14, 
+    paddingHorizontal: 12, 
+    paddingVertical: 6 
+  },
+  projectTypeBadgeText: { 
+    fontFamily: "Manrope_700Bold",
+    fontSize: 11, 
+    color: COLORS.emerald 
   },
 
-  progressTextGray: {
-    fontSize: 12,
-    color: "#64748B",
-  },
-
-  // ----------------------------------------------------
   // FILTER MODAL
-  // ----------------------------------------------------
-
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(67, 51, 39, 0.4)", // Warmer overlay tint
     justifyContent: "flex-end",
   },
-
   filterModalContainer: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "80%",
-    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    maxHeight: "85%",
+    padding: 24,
   },
-
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingBottom: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: COLORS.border,
   },
-
   modalTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontFamily: "Manrope_700Bold",
+    fontSize: 20,
+    color: COLORS.textPrimary,
   },
-
-  closeIcon: {
-    fontSize: 18,
-    color: "#64748B",
-  },
-
   modalBody: {
-    marginVertical: 12,
+    marginVertical: 16,
   },
-
   filterSectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-    marginTop: 12,
-    marginBottom: 8,
+    fontFamily: "Manrope_700Bold",
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    marginTop: 16,
+    marginBottom: 12,
   },
-
   filterChipContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
   },
-
   filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20, // pill
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    marginRight: 8,
-    marginBottom: 8,
+    borderColor: COLORS.border,
+    marginRight: 10,
+    marginBottom: 10,
   },
-
   activeFilterChip: {
-    backgroundColor: "#227B53",
-    borderColor: "#227B53",
+    backgroundColor: COLORS.buttonDark,
+    borderColor: COLORS.buttonDark,
   },
-
   filterChipText: {
-    color: "#475569",
-    fontSize: 12,
+    fontFamily: "Manrope_600SemiBold",
+    color: COLORS.textSecondary,
+    fontSize: 13,
   },
-
   activeFilterChipText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
+    color: COLORS.white,
   },
-
   modalFooter: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 12,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    borderTopColor: COLORS.border,
   },
-
   clearButton: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
-
   clearButtonText: {
-    color: "#64748B",
-    fontWeight: "600",
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.textSecondary,
+    fontSize: 15,
   },
-
   applyButton: {
     flex: 2,
-    backgroundColor: "#227B53",
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: COLORS.buttonDark,
+    paddingVertical: 16,
+    borderRadius: 30,
     alignItems: "center",
   },
-
   applyButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.white,
+    fontSize: 15,
   },
 
-  // ----------------------------------------------------
   // DETAIL SCREEN
-  // ----------------------------------------------------
-
   detailHeaderNav: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
-
-  backButton: {
-    fontSize: 30,
-    color: "#0F172A",
+  modalBackButton: {
+    padding: 4,
   },
-
+  modalHeartButton: {
+    padding: 4,
+  },
   detailNavTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontFamily: "Manrope_700Bold",
+    fontSize: 18,
+    color: COLORS.textPrimary,
   },
-
   detailBanner: {
     position: "relative",
-    height: 160,
-    marginBottom: 40,
+    height: 180,
+    marginBottom: 48,
   },
-
   detailBannerImage: {
     width: "100%",
     height: "100%",
   },
-
   detailAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     position: "absolute",
-    bottom: -32,
-    left: 16,
+    bottom: -40,
+    left: 24,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
+    borderWidth: 4,
+    borderColor: COLORS.surface,
   },
-
   detailAvatarImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     position: "absolute",
-    bottom: -32,
-    left: 16,
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
+    bottom: -40,
+    left: 24,
+    borderWidth: 4,
+    borderColor: COLORS.surface,
   },
-
   detailAvatarText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.white,
+    fontSize: 24,
   },
-
   detailContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 30,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
   },
-
   detailTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0F172A",
+    fontFamily: "Manrope_700Bold",
+    fontSize: 26,
+    color: COLORS.textPrimary,
+    letterSpacing: -0.5,
   },
-
   detailSubRow: {
     flexDirection: "row",
-    marginTop: 4,
-    marginBottom: 12,
+    marginTop: 6,
+    marginBottom: 20,
   },
-
   detailStatus: {
-    fontSize: 12,
-    color: "#166534",
-    fontWeight: "500",
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 14,
+    color: COLORS.emerald,
   },
-
   expressInterestButton: {
-    backgroundColor: "#227B53",
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: COLORS.buttonDark,
+    paddingVertical: 16,
+    borderRadius: 30, // pill shape
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 24,
   },
-
   sectionHeader: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginTop: 12,
-    marginBottom: 6,
+    fontFamily: "Manrope_700Bold",
+    fontSize: 18,
+    color: COLORS.textPrimary,
+    marginTop: 20,
+    marginBottom: 8,
   },
-
   bodyText: {
-    fontSize: 13,
-    color: "#475569",
-    lineHeight: 20,
+    fontFamily: "Manrope_400Regular",
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    lineHeight: 24,
   },
 
-  // ----------------------------------------------------
   // PROJECT DETAIL
-  // ----------------------------------------------------
-
   projectDetailBanner: {
-    height: 200,
+    height: 240,
     position: "relative",
+    marginBottom: 20,
   },
-
   projectDetailImage: {
     width: "100%",
     height: "100%",
   },
-
   projectDetailOverlay: {
     position: "absolute",
-    bottom: 12,
-    left: 12,
-    right: 12,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 24,
+    paddingTop: 60,
+    backgroundColor: 'rgba(1, 62, 55, 0.6)', // Gradient-like overlay
   },
-
   projectDetailBannerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    fontFamily: "Manrope_700Bold",
+    fontSize: 24,
+    color: COLORS.white,
+    marginTop: 12,
+    letterSpacing: -0.5,
+  },
+  projectDetailBannerSub: {
+    fontFamily: "Manrope_500Medium",
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
     marginTop: 4,
   },
 
-  projectDetailBannerSub: {
-    fontSize: 12,
-    color: "#E2E8F0",
-  },
-
-  // ----------------------------------------------------
   // FUNDING CARD
-  // ----------------------------------------------------
-
   fundingCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 12,
+    borderColor: COLORS.border,
+    padding: 20,
     marginVertical: 12,
   },
-
-  fundingRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 8,
-  },
-
   fundingStatGreen: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#227B53",
+    fontFamily: "Manrope_700Bold",
+    fontSize: 20,
+    color: COLORS.buttonDark,
+    marginBottom: 4,
   },
-
-  fundingStatBold: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-
-  fundingStatRed: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#DC2626",
-  },
-
   statLabel: {
-    fontSize: 11,
-    color: "#64748B",
+    fontFamily: "Manrope_500Medium",
+    fontSize: 13,
+    color: COLORS.textSecondary,
   },
 
-  // ----------------------------------------------------
   // INFO TABLE
-  // ----------------------------------------------------
-
   infoTable: {
-    marginVertical: 12,
+    marginVertical: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
   },
-
   infoTableRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: COLORS.border,
   },
-
   infoTableLabel: {
-    fontSize: 13,
-    color: "#64748B",
+    fontFamily: "Manrope_500Medium",
+    fontSize: 14,
+    color: COLORS.textSecondary,
   },
-
   infoTableValue: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#0F172A",
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 14,
+    color: COLORS.textPrimary,
     maxWidth: "60%",
     textAlign: "right",
   },
 
-  // ----------------------------------------------------
   // PROJECT ACTIONS
-  // ----------------------------------------------------
-
   projectActionRow: {
     flexDirection: "row",
-    marginTop: 12,
-    marginBottom: 24,
+    marginTop: 20,
+    marginBottom: 32,
   },
-
   contactNgoButton: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    paddingVertical: 12,
-    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingVertical: 16,
+    borderRadius: 30, // pill
     alignItems: "center",
-    marginRight: 8,
   },
-
   contactNgoText: {
-    color: "#0F172A",
-    fontWeight: "600",
-  },
-
-  sponsorProjectButton: {
-    flex: 2,
-    backgroundColor: "#227B53",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
+    fontFamily: "Manrope_700Bold",
+    color: COLORS.textPrimary,
+    fontSize: 15,
   },
 });

@@ -12,6 +12,13 @@ import {
     Alert,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
 // Firebase imports
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -21,28 +28,31 @@ import { computeMatch } from "../../utils/matchScore";
 import { loadSponsorInterests, setSaved } from "../../utils/interests";
 import { readLocalCache, writeLocalCache } from "../../utils/profileCache";
 
+// ─── LUXURY COLOR PALETTE (Sponsor Twist) ──────────────────────────────
 const COLORS = {
-    background: "#F9FAFB",
-    surface: "#FFFFFF",
-    primary: "#10B981", // emerald green — sponsor brand accent
-    primaryLight: "rgba(16, 185, 129, 0.10)",
-    textPrimary: "#0F172A",
-    textSecondary: "#64748B",
-    border: "#E5E7EB",
+    background: "#F8F6EE",       // Cream base
+    surface: "#FFFFFF",          // Clean white
+    primary: "#D9C982",          // Soft Luxury Gold
+    primarySoft: "rgba(217, 201, 130, 0.15)",
+    emerald: "#059669",          // Vibrant Emerald 
+    buttonDark: "#013e37",       // Deep luxury green (Sponsor Primary)
+    buttonDarkSoft: "rgba(1, 62, 55, 0.08)",
+    textPrimary: "#433327",      // Warm Bronze
+    textSecondary: "#8C7A6B",    // Muted taupe
+    border: "#E8DFD5",
     white: "#FFFFFF",
-    danger: "#EF4444",
-    statBlueBg: "#EEF2FF",
-    statBlueText: "#4338CA",
-    statGreenBg: "#DCFCE7",
-    statGreenText: "#15803D",
-    statYellowBg: "#FEF9C3",
-    statYellowText: "#B45309",
-    statPurpleBg: "#F3E8FF",
-    statPurpleText: "#7E22CE",
+    danger: "#DC2626",           // Elegant red
+    coral: "#DC2626",            // Notification dot
 };
 
-// A fixed palette to cycle through for NGO avatar backgrounds, since Firestore doesn't store one
-const AVATAR_COLORS = ["#10B981", "#2563EB", "#DB2777", "#7C3AED", "#C2410C", "#0EA5E9"];
+// Premium unified avatar colors for missing logos
+const AVATAR_COLORS = [
+    COLORS.buttonDark, 
+    COLORS.emerald, 
+    COLORS.primary, 
+    "#607A70", 
+    "#8C7A6B"
+];
 
 function getGreeting() {
     const hour = new Date().getHours();
@@ -61,7 +71,6 @@ function getInitials(name) {
         .toUpperCase();
 }
 
-// Turns a raw number into a short display string, e.g. 4200000 -> "R4.2M"
 function formatCurrencyShort(value) {
     const num = Number(value);
     if (isNaN(num)) return "R0";
@@ -70,20 +79,34 @@ function formatCurrencyShort(value) {
     return `R${num}`;
 }
 
-// Formats a full number with thousands separators, e.g. 45000 -> "R45,000"
 function formatCurrency(value) {
     const num = Number(value);
     if (isNaN(num)) return "R0";
     return `R${num.toLocaleString("en-ZA")}`;
 }
 
-// Formats a funding need value pulled from Firestore's fundingRequired field
 function formatFundingRange(value) {
     if (value == null || value === "") return "Not specified";
     return formatCurrency(value);
 }
 
+// Subtle luxury shadow
+const softShadow = {
+    shadowColor: COLORS.textPrimary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+};
+
 export default function SponsorHomeScreen({ navigation, route }) {
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
     const [sponsorProfile, setSponsorProfile] = useState(null);
     const [ngos, setNgos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -91,7 +114,6 @@ export default function SponsorHomeScreen({ navigation, route }) {
 
     const uid = auth.currentUser?.uid;
 
-    // Fetch the signed-in sponsor's own profile (for the greeting name)
     const fetchSponsorProfile = async () => {
         if (!uid) return;
         try {
@@ -105,7 +127,6 @@ export default function SponsorHomeScreen({ navigation, route }) {
         }
     };
 
-    // Fetch every user document where role == "ngo"
     const fetchNgos = async () => {
         try {
             const ngoQuery = query(collection(db, "users"), where("role", "==", "ngo"));
@@ -128,7 +149,6 @@ export default function SponsorHomeScreen({ navigation, route }) {
         }
     };
 
-    // Load which NGOs this sponsor has saved (stored in Firestore `interests`)
     const loadSaved = async () => {
         if (!uid) return;
         try {
@@ -144,7 +164,6 @@ export default function SponsorHomeScreen({ navigation, route }) {
         fetchNgos();
         loadSaved();
 
-        // Refresh saved hearts when coming back from Discover / details screens
         const unsubscribe = navigation.addListener("focus", loadSaved);
         return unsubscribe;
     }, [uid]);
@@ -152,7 +171,6 @@ export default function SponsorHomeScreen({ navigation, route }) {
     const organisationName =
         sponsorProfile?.organisationName || route?.params?.organisationName || "Sponsor";
 
-    // Rank NGOs by how well they match this sponsor's profile (best first)
     const rankedNgos = useMemo(() => {
         if (!sponsorProfile) return ngos;
         return ngos
@@ -167,7 +185,6 @@ export default function SponsorHomeScreen({ navigation, route }) {
     const toggleSaved = async (id) => {
         const wasSaved = savedIds.includes(id);
 
-        // Update the heart straight away, then save in the background
         setSavedIds((prev) =>
             wasSaved ? prev.filter((savedId) => savedId !== id) : [...prev, id]
         );
@@ -175,7 +192,6 @@ export default function SponsorHomeScreen({ navigation, route }) {
         try {
             await setSaved(id, !wasSaved);
         } catch (error) {
-            // Undo if saving failed
             setSavedIds((prev) =>
                 wasSaved ? [...prev, id] : prev.filter((savedId) => savedId !== id)
             );
@@ -184,15 +200,14 @@ export default function SponsorHomeScreen({ navigation, route }) {
     };
 
     const goToDiscover = () => navigation.navigate("Discover");
+    const goToOpportunity = (ngo) => navigation.navigate("SponsorOpportunityDetails", { opportunity: ngo });
 
-    const goToOpportunity = (ngo) => {
-        navigation.navigate("SponsorOpportunityDetails", { opportunity: ngo });
-    };
+    if (!fontsLoaded) return null;
 
     if (loading) {
         return (
             <SafeAreaView style={[styles.safeArea, styles.centered]}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
+                <ActivityIndicator size="large" color={COLORS.buttonDark} />
             </SafeAreaView>
         );
     }
@@ -201,27 +216,20 @@ export default function SponsorHomeScreen({ navigation, route }) {
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerText}>
-                        <Text style={styles.greetingSmall}>{getGreeting()} 👋</Text>
+                        <Text style={styles.greetingSmall}>{getGreeting()}</Text>
                         <Text style={styles.greetingName}>{organisationName}</Text>
-                        <Text style={styles.subtitle}>
-                            Let's find your next impact partnership.
-                        </Text>
+                        <Text style={styles.subtitle}>Let's find your next impact partnership.</Text>
                     </View>
 
                     <View style={styles.headerActions}>
-                        <TouchableOpacity style={styles.notificationButton} activeOpacity={0.7}>
-                            <Ionicons
-                                name="notifications-outline"
-                                size={22}
-                                color={COLORS.textPrimary}
-                            />
+                        <TouchableOpacity style={styles.bellButton} activeOpacity={0.7}>
+                            <Ionicons name="notifications-outline" size={20} color={COLORS.textPrimary} />
+                            <View style={styles.bellDot} />
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -230,10 +238,7 @@ export default function SponsorHomeScreen({ navigation, route }) {
                             onPress={() => navigation.navigate("Profile")}
                         >
                             {sponsorProfile?.profileImageUrl ? (
-                                <Image
-                                    source={{ uri: sponsorProfile.profileImageUrl }}
-                                    style={styles.avatarImage}
-                                />
+                                <Image source={{ uri: sponsorProfile.profileImageUrl }} style={styles.avatarImage} />
                             ) : (
                                 <Text style={styles.avatarText}>{getInitials(organisationName)}</Text>
                             )}
@@ -241,34 +246,29 @@ export default function SponsorHomeScreen({ navigation, route }) {
                     </View>
                 </View>
 
-                {/* Stats */}
-                <View style={styles.statsRow}>
-                    <View style={[styles.statCard, { backgroundColor: COLORS.statBlueBg }]}>
-                        <Text style={[styles.statNumber, { color: COLORS.statBlueText }]}>
-                            {ngos.length}
-                        </Text>
-                        <Text style={styles.statLabel}>NGOs Listed</Text>
+                {/* Dashboard Stats (2x2 Grid for Premium feel) */}
+                <View style={styles.statsGrid}>
+                    <View style={styles.statsRow}>
+                        <View style={styles.statCard}>
+                            <Text style={styles.statNumber}>{ngos.length}</Text>
+                            <Text style={styles.statLabel}>NGOs Listed</Text>
+                        </View>
+                        <View style={styles.statCard}>
+                            <Text style={styles.statNumber}>{formatCurrencyShort(sponsorProfile?.fundingBudget)}</Text>
+                            <Text style={styles.statLabel}>Your Budget</Text>
+                        </View>
                     </View>
-
-                    <View style={[styles.statCard, { backgroundColor: COLORS.statGreenBg }]}>
-                        <Text style={[styles.statNumber, { color: COLORS.statGreenText }]}>
-                            {formatCurrencyShort(sponsorProfile?.fundingBudget)}
-                        </Text>
-                        <Text style={styles.statLabel}>Your Budget</Text>
-                    </View>
-
-                <View style={[styles.statCard, { backgroundColor: COLORS.statYellowBg }]}>
-                        <Text style={[styles.statNumber, { color: COLORS.statYellowText }]}>
-                            {rankedNgos.filter((ngo) => computeMatch(sponsorProfile || {}, ngo).matchScore >= 60).length}
-                        </Text>
-                        <Text style={styles.statLabel}>Strong matches</Text>
-                    </View>
-
-                    <View style={[styles.statCard, { backgroundColor: COLORS.statPurpleBg }]}>
-                        <Text style={[styles.statNumber, { color: COLORS.statPurpleText }]}>
-                            {savedIds.length}
-                        </Text>
-                        <Text style={styles.statLabel}>Saved</Text>
+                    <View style={styles.statsRow}>
+                        <View style={styles.statCard}>
+                            <Text style={styles.statNumber}>
+                                {rankedNgos.filter((ngo) => computeMatch(sponsorProfile || {}, ngo).matchScore >= 60).length}
+                            </Text>
+                            <Text style={styles.statLabel}>Strong Matches</Text>
+                        </View>
+                        <View style={styles.statCard}>
+                            <Text style={styles.statNumber}>{savedIds.length}</Text>
+                            <Text style={styles.statLabel}>Saved</Text>
+                        </View>
                     </View>
                 </View>
 
@@ -288,48 +288,29 @@ export default function SponsorHomeScreen({ navigation, route }) {
                     >
                         <View style={styles.recommendedTopRow}>
                             {topMatch.profileImageUrl ? (
-                                <Image
-                                    source={{ uri: topMatch.profileImageUrl }}
-                                    style={styles.orgLogoImage}
-                                />
+                                <Image source={{ uri: topMatch.profileImageUrl }} style={styles.orgLogoImage} />
                             ) : (
                                 <View style={[styles.orgLogo, { backgroundColor: topMatch.color }]}>
-                                    <Text style={styles.orgLogoText}>
-                                        {getInitials(topMatch.organisationName)}
-                                    </Text>
+                                    <Text style={styles.orgLogoText}>{getInitials(topMatch.organisationName)}</Text>
                                 </View>
                             )}
+
+                            <View style={styles.matchBadge}>
+                                <Text style={styles.matchText}>{computeMatch(sponsorProfile || {}, topMatch).matchScore}%</Text>
+                                <Text style={styles.matchLabel}>Match</Text>
+                            </View>
                         </View>
 
                         <View style={styles.orgNameRow}>
-                            <Text style={styles.orgName}>
-                                {topMatch.organisationName || "Unnamed NGO"}
-                            </Text>
+                            <Text style={styles.orgName}>{topMatch.organisationName || "Unnamed NGO"}</Text>
                             {topMatch.profileCompleted && (
-                                <Ionicons
-                                    name="checkmark-circle"
-                                    size={16}
-                                    color={COLORS.primary}
-                                    style={styles.verifiedIcon}
-                                />
+                                <Ionicons name="checkmark-circle" size={16} color={COLORS.emerald} style={styles.verifiedIcon} />
                             )}
                         </View>
 
-                        {topMatch.profileCompleted && (
-                            <View style={styles.verifiedBadge}>
-                                <Text style={styles.verifiedBadgeText}>Verified</Text>
-                            </View>
-                        )}
-
                         <View style={styles.locationRow}>
-                            <Ionicons
-                                name="location-outline"
-                                size={14}
-                                color={COLORS.textSecondary}
-                            />
-                            <Text style={styles.locationText}>
-                                {topMatch.location || "Location not provided"}
-                            </Text>
+                            <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
+                            <Text style={styles.locationText}>{topMatch.location || "Location not provided"}</Text>
                         </View>
 
                         {topMatch.targetCommunity ? (
@@ -344,9 +325,10 @@ export default function SponsorHomeScreen({ navigation, route }) {
                             {topMatch.mission || "No mission statement provided yet."}
                         </Text>
 
-                        <Text style={styles.fundingNeed}>
-                            Funding Need: {formatFundingRange(topMatch.fundingRequired)}
-                        </Text>
+                        <View style={styles.fundingNeedBox}>
+                            <Text style={styles.fundingNeedLabel}>Funding Need</Text>
+                            <Text style={styles.fundingNeedValue}>{formatFundingRange(topMatch.fundingRequired)}</Text>
+                        </View>
 
                         <View style={styles.recommendedActions}>
                             <TouchableOpacity
@@ -354,7 +336,7 @@ export default function SponsorHomeScreen({ navigation, route }) {
                                 activeOpacity={0.85}
                                 onPress={() => goToOpportunity(topMatch)}
                             >
-                                <Text style={styles.viewMatchButtonText}>View Match</Text>
+                                <Text style={styles.viewMatchButtonText}>View Details</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
@@ -364,12 +346,8 @@ export default function SponsorHomeScreen({ navigation, route }) {
                             >
                                 <Ionicons
                                     name={savedIds.includes(topMatch.id) ? "heart" : "heart-outline"}
-                                    size={20}
-                                    color={
-                                        savedIds.includes(topMatch.id)
-                                            ? COLORS.danger
-                                            : COLORS.textSecondary
-                                    }
+                                    size={22}
+                                    color={savedIds.includes(topMatch.id) ? COLORS.danger : COLORS.textPrimary}
                                 />
                             </TouchableOpacity>
                         </View>
@@ -383,7 +361,7 @@ export default function SponsorHomeScreen({ navigation, route }) {
 
                 {/* More live NGO profiles */}
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>More organisations</Text>
+                    <Text style={styles.sectionTitle}>More Organisations</Text>
                     <TouchableOpacity onPress={goToDiscover} activeOpacity={0.7}>
                         <Text style={styles.viewAll}>See All</Text>
                     </TouchableOpacity>
@@ -392,7 +370,9 @@ export default function SponsorHomeScreen({ navigation, route }) {
                 <View style={styles.liveList}>
                     {moreNgos.slice(0, 3).map((ngo) => (
                         <TouchableOpacity key={ngo.id} style={styles.liveNgoCard} onPress={() => goToOpportunity(ngo)} activeOpacity={0.82}>
-                            <View style={[styles.liveAvatar, { backgroundColor: ngo.color }]}><Text style={styles.liveAvatarText}>{getInitials(ngo.organisationName)}</Text></View>
+                            <View style={[styles.liveAvatar, { backgroundColor: ngo.color }]}>
+                                <Text style={styles.liveAvatarText}>{getInitials(ngo.organisationName)}</Text>
+                            </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.liveNgoName} numberOfLines={1}>{ngo.organisationName || "Organisation"}</Text>
                                 <Text style={styles.liveNgoMeta} numberOfLines={1}>{ngo.targetCommunity || "Community impact"} · {ngo.location || "Location not provided"}</Text>
@@ -402,77 +382,6 @@ export default function SponsorHomeScreen({ navigation, route }) {
                     ))}
                     {!loading && moreNgos.length === 0 && <Text style={styles.liveNgoMeta}>More real NGO profiles will appear here as they join.</Text>}
                 </View>
-
-                {/* All NGOs */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>All NGOs</Text>
-                    <TouchableOpacity onPress={goToDiscover} activeOpacity={0.7}>
-                        <Text style={styles.viewAll}>View All</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {moreNgos.length === 0 && !topMatch ? (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyStateText}>No NGOs found in the database yet.</Text>
-                    </View>
-                ) : (
-                    <View style={styles.ngoList}>
-                        {moreNgos.map((ngo) => (
-                            <TouchableOpacity
-                                key={ngo.id}
-                                style={styles.ngoRow}
-                                activeOpacity={0.7}
-                                onPress={() => goToOpportunity(ngo)}
-                            >
-                                {ngo.profileImageUrl ? (
-                                    <Image
-                                        source={{ uri: ngo.profileImageUrl }}
-                                        style={styles.ngoAvatarImage}
-                                    />
-                                ) : (
-                                    <View style={[styles.ngoAvatar, { backgroundColor: ngo.color }]}>
-                                        <Text style={styles.ngoAvatarText}>
-                                            {getInitials(ngo.organisationName)}
-                                        </Text>
-                                    </View>
-                                )}
-
-                                <View style={styles.ngoInfo}>
-                                    <View style={styles.ngoNameRow}>
-                                        <Text style={styles.ngoName} numberOfLines={1}>
-                                            {ngo.organisationName || "Unnamed NGO"}
-                                        </Text>
-                                        {ngo.profileCompleted && (
-                                            <Ionicons
-                                                name="checkmark-circle"
-                                                size={14}
-                                                color={COLORS.primary}
-                                                style={styles.verifiedIcon}
-                                            />
-                                        )}
-                                    </View>
-                                    <View style={styles.ngoLocationRow}>
-                                        <Ionicons
-                                            name="location-outline"
-                                            size={12}
-                                            color={COLORS.textSecondary}
-                                        />
-                                        <Text style={styles.ngoLocation}>
-                                            {ngo.location || "Not provided"}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                <Ionicons
-                                    name="chevron-forward"
-                                    size={18}
-                                    color={COLORS.textSecondary}
-                                    style={styles.chevron}
-                                />
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -481,230 +390,332 @@ export default function SponsorHomeScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.background },
     centered: { justifyContent: "center", alignItems: "center" },
-    scrollContent: { padding: 20, paddingTop: 10, paddingBottom: 112 },
+    scrollContent: { padding: 24, paddingTop: 10, paddingBottom: 112 },
 
+    /* Header */
     header: {
         flexDirection: "row",
         alignItems: "flex-start",
         justifyContent: "space-between",
-        marginBottom: 20,
+        marginBottom: 28,
     },
     headerText: { flex: 1, paddingRight: 12 },
-    greetingSmall: { fontSize: 13, fontWeight: "600", color: COLORS.primary, marginBottom: 4 },
-    greetingName: { fontSize: 22, fontWeight: "800", color: COLORS.textPrimary, marginBottom: 4 },
-    subtitle: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
-    headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-    notificationButton: {
-        width: 42,
-        height: 42,
-        borderRadius: 21,
+    greetingSmall: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 14, 
+        color: COLORS.primary, 
+        marginBottom: 4,
+        letterSpacing: 1,
+        textTransform: "uppercase"
+    },
+    greetingName: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 28, 
+        color: COLORS.textPrimary, 
+        marginBottom: 4,
+        letterSpacing: -0.5,
+    },
+    subtitle: { 
+        fontFamily: "Manrope_400Regular",
+        fontSize: 14, 
+        color: COLORS.textSecondary, 
+        lineHeight: 20 
+    },
+    headerActions: { flexDirection: "row", alignItems: "center", gap: 12 },
+    bellButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: COLORS.surface,
         borderWidth: 1,
         borderColor: COLORS.border,
         alignItems: "center",
         justifyContent: "center",
+        ...softShadow
+    },
+    bellDot: {
+        position: "absolute",
+        top: 12,
+        right: 12,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: COLORS.coral,
+        borderWidth: 1.5,
+        borderColor: COLORS.surface,
     },
     avatar: {
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        backgroundColor: COLORS.primary,
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: COLORS.buttonDark,
         alignItems: "center",
         justifyContent: "center",
         overflow: "hidden",
+        borderWidth: 2,
+        borderColor: COLORS.surface,
+        ...softShadow
     },
-    avatarImage: { width: 42, height: 42 },
-    avatarText: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+    avatarImage: { width: "100%", height: "100%" },
+    avatarText: { fontFamily: "Manrope_700Bold", color: COLORS.white, fontSize: 16 },
 
-    statsRow: { flexDirection: "row", gap: 10, marginBottom: 28 },
+    /* Stats Grid */
+    statsGrid: { marginBottom: 32, gap: 12 },
+    statsRow: { flexDirection: "row", gap: 12 },
     statCard: {
         flex: 1,
-        borderRadius: 16,
-        paddingVertical: 14,
-        alignItems: "center",
-        justifyContent: "center",
+        backgroundColor: COLORS.surface,
+        borderRadius: 20,
+        paddingVertical: 18,
+        paddingHorizontal: 16,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        alignItems: "flex-start",
+        ...softShadow
     },
-    statNumber: { fontSize: 16, fontWeight: "800", marginBottom: 4 },
-    statLabel: { fontSize: 11, fontWeight: "600", color: COLORS.textSecondary },
+    statNumber: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 24, 
+        color: COLORS.buttonDark, 
+        marginBottom: 4 
+    },
+    statLabel: { 
+        fontFamily: "Manrope_600SemiBold",
+        fontSize: 12, 
+        color: COLORS.textSecondary 
+    },
 
+    /* Section Headers */
     sectionHeader: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 14,
+        marginBottom: 16,
     },
-    sectionTitle: { fontSize: 17, fontWeight: "700", color: COLORS.textPrimary },
-    viewAll: { fontSize: 13, fontWeight: "600", color: COLORS.primary },
+    sectionTitle: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 18, 
+        color: COLORS.textPrimary 
+    },
+    viewAll: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 14, 
+        color: COLORS.primary 
+    },
 
+    /* Empty State */
     emptyState: {
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: 30,
+        paddingVertical: 40,
         backgroundColor: COLORS.surface,
-        borderRadius: 16,
+        borderRadius: 24,
         borderWidth: 1,
         borderColor: COLORS.border,
-        marginBottom: 28,
-        gap: 8,
+        marginBottom: 32,
+        gap: 12,
+        ...softShadow
     },
-    emptyStateText: { fontSize: 13, color: COLORS.textSecondary },
+    emptyStateText: { 
+        fontFamily: "Manrope_500Medium",
+        fontSize: 14, 
+        color: COLORS.textSecondary 
+    },
 
+    /* Recommended Card */
     recommendedCard: {
         backgroundColor: COLORS.surface,
-        borderRadius: 20,
-        padding: 18,
-        marginBottom: 28,
+        borderRadius: 24,
+        padding: 24,
+        marginBottom: 32,
         borderWidth: 1,
         borderColor: COLORS.border,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.04,
-        shadowRadius: 10,
-        elevation: 2,
+        ...softShadow
     },
     recommendedTopRow: {
         flexDirection: "row",
-        alignItems: "flex-start",
+        alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 10,
+        marginBottom: 16,
     },
-    orgLogo: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-    orgLogoImage: { width: 48, height: 48, borderRadius: 14 },
-    orgLogoText: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
-    orgNameRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
-    orgName: { fontSize: 17, fontWeight: "700", color: COLORS.textPrimary },
-    verifiedIcon: { marginLeft: 5 },
-    verifiedBadge: {
-        alignSelf: "flex-start",
-        backgroundColor: COLORS.primaryLight,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 8,
-        marginBottom: 8,
+    orgLogo: { 
+        width: 56, 
+        height: 56, 
+        borderRadius: 18, 
+        alignItems: "center", 
+        justifyContent: "center" 
     },
-    verifiedBadgeText: { fontSize: 11, fontWeight: "700", color: COLORS.primary },
-    locationRow: { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 4 },
-    locationText: { fontSize: 13, color: COLORS.textSecondary },
-    tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
+    orgLogoImage: { 
+        width: 56, 
+        height: 56, 
+        borderRadius: 18 
+    },
+    orgLogoText: { 
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.white, 
+        fontSize: 18 
+    },
+    matchBadge: {
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: COLORS.buttonDarkSoft,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 16,
+    },
+    matchText: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 16, 
+        color: COLORS.buttonDark 
+    },
+    matchLabel: { 
+        fontFamily: "Manrope_600SemiBold",
+        fontSize: 10, 
+        color: COLORS.buttonDark,
+        textTransform: "uppercase" 
+    },
+    orgNameRow: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        marginBottom: 6 
+    },
+    orgName: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 20, 
+        color: COLORS.textPrimary 
+    },
+    verifiedIcon: { marginLeft: 6 },
+    locationRow: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        marginBottom: 16, 
+        gap: 4 
+    },
+    locationText: { 
+        fontFamily: "Manrope_500Medium",
+        fontSize: 14, 
+        color: COLORS.textSecondary 
+    },
+    tagsRow: { 
+        flexDirection: "row", 
+        flexWrap: "wrap", 
+        gap: 8, 
+        marginBottom: 16 
+    },
     tagPill: {
         backgroundColor: COLORS.background,
         borderWidth: 1,
         borderColor: COLORS.border,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
     },
-    tagPillText: { fontSize: 11, fontWeight: "600", color: COLORS.textSecondary },
-    description: { fontSize: 13, lineHeight: 19, color: COLORS.textSecondary, marginBottom: 12 },
-    fundingNeed: { fontSize: 13, fontWeight: "700", color: COLORS.textPrimary, marginBottom: 16 },
-    recommendedActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+    tagPillText: { 
+        fontFamily: "Manrope_600SemiBold",
+        fontSize: 12, 
+        color: COLORS.textSecondary 
+    },
+    description: { 
+        fontFamily: "Manrope_400Regular",
+        fontSize: 15, 
+        lineHeight: 22, 
+        color: COLORS.textSecondary, 
+        marginBottom: 16 
+    },
+    fundingNeedBox: {
+        backgroundColor: COLORS.background,
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    fundingNeedLabel: {
+        fontFamily: "Manrope_600SemiBold",
+        fontSize: 12,
+        color: COLORS.textSecondary,
+        marginBottom: 4,
+    },
+    fundingNeedValue: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 18,
+        color: COLORS.buttonDark,
+    },
+    recommendedActions: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        gap: 12 
+    },
     viewMatchButton: {
         flex: 1,
-        backgroundColor: COLORS.primary,
-        borderRadius: 14,
-        paddingVertical: 14,
+        backgroundColor: COLORS.buttonDark,
+        borderRadius: 30, // Luxury pill shape
+        paddingVertical: 16,
         alignItems: "center",
         justifyContent: "center",
-        shadowColor: COLORS.primary,
+        shadowColor: COLORS.buttonDark,
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.25,
         shadowRadius: 10,
-        elevation: 3,
+        elevation: 4,
     },
-    viewMatchButtonText: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+    viewMatchButtonText: { 
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.white, 
+        fontSize: 16,
+        letterSpacing: 0.3
+    },
     saveButton: {
-        width: 50,
-        height: 50,
-        borderRadius: 14,
-        borderWidth: 1,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        borderWidth: 1.5,
         borderColor: COLORS.border,
         alignItems: "center",
         justifyContent: "center",
-    },
-
-    projectsRow: { gap: 14, paddingBottom: 4, marginBottom: 28 },
-    projectCard: {
-        width: 220,
         backgroundColor: COLORS.surface,
-        borderRadius: 18,
-        overflow: "hidden",
-        borderWidth: 1,
-        borderColor: COLORS.border,
     },
-    projectImage: { height: 110, alignItems: "center", justifyContent: "center" },
-    projectCategoryPill: {
-        position: "absolute",
-        top: 10,
-        left: 10,
-        backgroundColor: "rgba(255,255,255,0.92)",
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    projectCategoryText: { fontSize: 10, fontWeight: "700", color: COLORS.textPrimary },
-    projectBody: { padding: 14 },
-    projectTitle: { fontSize: 14, fontWeight: "700", color: COLORS.textPrimary, marginBottom: 4, lineHeight: 19 },
-    projectOrg: { fontSize: 12, fontWeight: "600", color: COLORS.primary, marginBottom: 10 },
-    progressTrack: {
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: COLORS.background,
-        overflow: "hidden",
-        marginBottom: 8,
-    },
-    progressFill: { height: "100%", borderRadius: 3, backgroundColor: COLORS.primary },
-    progressLabelsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    progressRaised: { fontSize: 10, fontWeight: "700", color: COLORS.textPrimary },
-    progressPercent: { fontSize: 10, color: COLORS.textSecondary },
 
-    activityList: { marginBottom: 28, gap: 10 },
-    activityRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: COLORS.surface,
-        borderRadius: 14,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: COLORS.border,
+    /* Live List */
+    liveList: { gap: 12 },
+    liveNgoCard: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        backgroundColor: COLORS.surface, 
+        borderRadius: 20, 
+        borderWidth: 1, 
+        borderColor: COLORS.border, 
+        padding: 16,
+        ...softShadow
     },
-    activityRowUnread: { backgroundColor: COLORS.primaryLight, borderColor: "transparent" },
-    activityIcon: {
-        width: 38,
-        height: 38,
-        borderRadius: 12,
-        alignItems: "center",
-        justifyContent: "center",
-        marginRight: 12,
+    liveAvatar: { 
+        width: 48, 
+        height: 48, 
+        borderRadius: 16, 
+        alignItems: "center", 
+        justifyContent: "center", 
+        marginRight: 16 
     },
-    activityContent: { flex: 1, paddingRight: 8 },
-    activityText: { fontSize: 13, fontWeight: "600", color: COLORS.textPrimary, lineHeight: 18, marginBottom: 3 },
-    activityTime: { fontSize: 11, color: COLORS.textSecondary },
-    unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
-
-    liveList: { marginBottom: 28 },
-    liveNgoCard: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 13, marginBottom: 9 },
-    liveAvatar: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", marginRight: 12 },
-    liveAvatarText: { color: COLORS.white, fontWeight: "800", fontSize: 13 },
-    liveNgoName: { color: COLORS.textPrimary, fontWeight: "700", fontSize: 14 },
-    liveNgoMeta: { color: COLORS.textSecondary, fontSize: 11, marginTop: 4 },
-    liveScore: { color: COLORS.primary, fontWeight: "800", fontSize: 13, marginLeft: 8 },
-
-    ngoList: { gap: 4 },
-    ngoRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
-    ngoAvatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 14,
-        alignItems: "center",
-        justifyContent: "center",
-        marginRight: 12,
+    liveAvatarText: { 
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.white, 
+        fontSize: 15 
     },
-    ngoAvatarImage: { width: 44, height: 44, borderRadius: 14, marginRight: 12 },
-    ngoAvatarText: { color: COLORS.white, fontSize: 13, fontWeight: "700" },
-    ngoInfo: { flex: 1, paddingRight: 8 },
-    ngoNameRow: { flexDirection: "row", alignItems: "center", marginBottom: 3 },
-    ngoName: { fontSize: 14, fontWeight: "700", color: COLORS.textPrimary },
-    ngoLocationRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-    ngoLocation: { fontSize: 12, color: COLORS.textSecondary },
-    chevron: { marginLeft: 2 },
+    liveNgoName: { 
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.textPrimary, 
+        fontSize: 16,
+        marginBottom: 4
+    },
+    liveNgoMeta: { 
+        fontFamily: "Manrope_500Medium",
+        color: COLORS.textSecondary, 
+        fontSize: 13 
+    },
+    liveScore: { 
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.buttonDark, 
+        fontSize: 16, 
+        marginLeft: 12 
+    },
 });
