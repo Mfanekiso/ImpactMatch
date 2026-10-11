@@ -1,5 +1,5 @@
-import React from "react";
-import { View, StyleSheet, Platform } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, StyleSheet, Platform, Animated, Text } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -32,169 +32,110 @@ import useUnreadMessages from "../hooks/useUnreadMessages";
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-// ─── Luxurious Tab Bar Theme ────────────────────────────────────────────────
-const TAB_COLORS = {
-    background: "#FFFFFF",                       // Clean white surface
-    backgroundSoft: "#FDFBF6",                   // Warm off-white alt
-    border: "#EFE7D8",                           // Soft cream border
-    gold: "#D9C982",                             // Soft Luxury Gold (accent)
-    goldDeep: "#C7B36A",                         // Slightly deeper gold
-    goldWash: "#F7F1DC",                         // Soft gold background wash (active pill)
-    goldGlow: "rgba(217, 201, 130, 0.35)",       // Gold-tinted glow shadow
-    bronze: "#433327",                           // Rich espresso brown (active icon)
-    taupe: "#8C7A6B",                            // Muted taupe (inactive)
-    taupeSoft: "#B8A99A",                        // Very muted for subtle state
+// ─── LUXURY COLOR PALETTE (NGO Side) ──────────────────────────────────────
+const COLORS = {
+    background: "#FFFFFF",
+    border: "#D9C982",           // Nice Solid Gold border for the nav
+    activeBg: "#433327",         // Warm Bronze (Distinct from Sponsor's Dark Green)
+    activeIcon: "#D9C982",       // Luxury Gold
+    inactiveIcon: "#8C7A6B",     // Muted Taupe
+    danger: "#DC2626",           // Elegant Red for badges
 };
 
-const tabStyles = StyleSheet.create({
-    tabBar: {
-        position: "absolute",
-        left: 14,
-        right: 14,
-        bottom: Platform.OS === "ios" ? 18 : 12,
-        height: 70,
-        borderRadius: 24,
-        backgroundColor: TAB_COLORS.background,
-        borderTopWidth: 1,
-        borderWidth: 1,
-        borderColor: TAB_COLORS.gold,
-        paddingTop: 6,
-        paddingBottom: 7,
-        paddingHorizontal: 7,
-        // Warm gold-tinted floating shadow
-        ...Platform.select({
-            web: {
-                boxShadow: "0px 16px 40px rgba(67, 51, 39, 0.14), 0px 4px 12px rgba(217, 201, 130, 0.25)",
-            },
-            default: {
-                shadowColor: "#433327",
-                shadowOffset: { width: 0, height: 16 },
-                shadowOpacity: 0.14,
-                shadowRadius: 30,
-                elevation: 16,
-            },
-        }),
-    },
-    tabBarBackground: {
-        flex: 1,
-        borderRadius: 32,
-        backgroundColor: TAB_COLORS.background,
-    },
-    tabItem: {
-        borderRadius: 20,
-        marginHorizontal: 4,
-        paddingVertical: 4,
-    },
-    tabLabel: {
-        fontSize: 11,
-        fontWeight: "600",
-        letterSpacing: 0.6,
-        marginTop: 4,
-        marginBottom: 2,
-    },
-    iconWrap: {
-        width: 44,
-        height: 32,
-        borderRadius: 16,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    iconWrapActive: {
-        backgroundColor: TAB_COLORS.goldWash,
-        // Gold glow around the active pill
-        ...Platform.select({
-            web: {
-                boxShadow: "0px 4px 14px rgba(217, 201, 130, 0.4)",
-            },
-            default: {
-                shadowColor: TAB_COLORS.gold,
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.4,
-                shadowRadius: 10,
-                elevation: 6,
-            },
-        }),
-    },
-    unreadBadge: {
-        backgroundColor: "#C2413A",
-        color: "#FFFFFF",
-        fontSize: 10,
-        fontWeight: "700",
-        minWidth: 18,
-        height: 18,
-        lineHeight: 18,
-    },
-});
+const TAB_ICONS = {
+    Home: ["home", "home-outline"],
+    Matches: ["people", "people-outline"],
+    Messages: ["chatbubbles", "chatbubbles-outline"],
+    Impact: ["analytics", "analytics-outline"],
+};
 
-// ─── Reusable icon renderer ─────────────────────────────────────────────────
-const renderTabIcon = (filledName, outlineName) =>
-    ({ color, focused }) => (
-        <View style={[tabStyles.iconWrap, focused && tabStyles.iconWrapActive]}>
-            <Ionicons
-                name={focused ? filledName : outlineName}
-                size={26}
-                color={focused ? TAB_COLORS.bronze : TAB_COLORS.taupe}
-            />
-        </View>
+// ─── ANIMATED TAB ICON COMPONENT ────────────────────────────────────────
+const AnimatedTabIcon = ({ focused, routeName }) => {
+    // Subtle spring animation expanding the icon wrapper
+    const scaleAnim = useRef(new Animated.Value(focused ? 1 : 0.85)).current;
+
+    useEffect(() => {
+        Animated.spring(scaleAnim, {
+            toValue: focused ? 1 : 0.85,
+            friction: 5,
+            tension: 80,
+            useNativeDriver: true,
+        }).start();
+    }, [focused]);
+
+    const icons = TAB_ICONS[routeName];
+    const iconName = focused ? icons[0] : icons[1];
+
+    return (
+        <Animated.View style={[tabStyles.iconWrap, { transform: [{ scale: scaleAnim }] }]}>
+            <View style={[tabStyles.iconBackground, focused && tabStyles.iconBackgroundActive]}>
+                <Ionicons
+                    name={iconName}
+                    size={22}
+                    color={focused ? COLORS.activeIcon : COLORS.inactiveIcon}
+                />
+            </View>
+        </Animated.View>
     );
+};
 
 // 1. Create the Tab Navigator for post-login screens
 function MainTabs({ route }) {
     const unreadCount = useUnreadMessages();
     return (
         <Tab.Navigator
-            screenOptions={{
+            screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarShowLabel: true,
-                tabBarActiveTintColor: TAB_COLORS.bronze,
-                tabBarInactiveTintColor: TAB_COLORS.taupe,
                 tabBarStyle: tabStyles.tabBar,
-                tabBarLabelStyle: tabStyles.tabLabel,
                 tabBarItemStyle: tabStyles.tabItem,
-                tabBarBackground: () => <View style={tabStyles.tabBarBackground} />,
-            }}
+                tabBarShowLabel: true,
+                tabBarHideOnKeyboard: true,
+                
+                tabBarIcon: ({ focused }) => (
+                    <AnimatedTabIcon focused={focused} routeName={route.name} />
+                ),
+                
+                tabBarLabel: ({ focused }) => (
+                    <Text style={[tabStyles.tabLabel, focused && tabStyles.tabLabelActive]}>
+                        {route.name}
+                    </Text>
+                ),
+            })}
         >
             <Tab.Screen
                 name="Home"
                 component={NGOHomeScreen}
                 initialParams={route?.params?.params || route?.params}
-                options={{
-                    tabBarLabel: "Home",
-                    tabBarIcon: renderTabIcon("home", "home-outline"),
-                }}
             />
 
             <Tab.Screen
                 name="Matches"
                 component={MatchesScreen}
-                options={{
-                    tabBarLabel: "Matches",
-                    // Fixed: Changed from "collaboration" to standard Ionicons "people"
-                    tabBarIcon: renderTabIcon("people", "people-outline"),
-                }}
             />
 
             <Tab.Screen
                 name="Messages"
                 component={MessagesScreen}
                 options={{
-                    tabBarLabel: "Messages",
                     tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
                     tabBarBadgeStyle: tabStyles.unreadBadge,
-                    // Fixed: Changed from "chat" to standard Ionicons "chatbubbles"
-                    tabBarIcon: renderTabIcon("chatbubbles", "chatbubbles-outline"),
                 }}
             />
 
             <Tab.Screen
                 name="Impact"
                 component={ImpactScreen}
-                options={{
-                    tabBarLabel: "Impact",
-                    tabBarIcon: renderTabIcon("analytics", "analytics-outline"),
-                }}
             />
 
+            {/* Hidden Profile Tab (Access via Header Avatar) */}
+            <Tab.Screen
+                name="Profile"
+                component={NGOProfileScreen}
+                options={{
+                    tabBarItemStyle: { display: "none" },
+                    tabBarButton: () => null,
+                }}
+            />
         </Tab.Navigator>
     );
 }
@@ -234,3 +175,67 @@ export default function AppNavigator({ initialRouteName = "Welcome", initialRout
         </NavigationContainer>
     );
 }
+
+// ─── STYLES ─────────────────────────────────────────────────────────────
+const tabStyles = StyleSheet.create({
+    tabBar: {
+        position: "absolute",
+        left: 16,
+        right: 16,
+        bottom: Platform.OS === "ios" ? 24 : 16,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: COLORS.background,
+        borderWidth: 1.5, // Slightly thicker border to show off the gold
+        borderColor: COLORS.border,
+        paddingBottom: 0,
+        elevation: 8,
+        shadowColor: "#D9C982", // Gold tinted shadow for extra elegance
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+    },
+    tabItem: {
+        flex: 1,
+        paddingTop: 8,
+        paddingBottom: 6,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    iconWrap: {
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    iconBackground: {
+        width: 48,
+        height: 32,
+        borderRadius: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "transparent",
+    },
+    iconBackgroundActive: {
+        backgroundColor: COLORS.activeBg,
+    },
+    tabLabel: {
+        fontSize: 10,
+        fontFamily: "Manrope_600SemiBold",
+        color: COLORS.inactiveIcon,
+        marginTop: 4,
+    },
+    tabLabelActive: {
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.activeBg,
+    },
+    unreadBadge: {
+        backgroundColor: COLORS.danger,
+        color: COLORS.white,
+        fontSize: 10,
+        fontWeight: "700",
+        minWidth: 18,
+        height: 18,
+        lineHeight: 18,
+        borderRadius: 9,
+        marginTop: 6,
+    },
+});
