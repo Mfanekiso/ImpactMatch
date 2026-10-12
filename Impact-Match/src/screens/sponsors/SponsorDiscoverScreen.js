@@ -148,7 +148,10 @@ export default function SponsorDiscoverScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    const projectsQuery = query(collection(db, "projects"), where("status", "==", "open"));
+    const projectsQuery = query(
+      collection(db, "projects"),
+      where("status", "in", ["open", "active", "Active"])
+    );
     return onSnapshot(projectsQuery, (snapshot) => {
       const rows = snapshot.docs.map((projectDoc) => {
         const project = projectDoc.data();
@@ -166,7 +169,11 @@ export default function SponsorDiscoverScreen({ navigation }) {
           verified: !!project.ownerVerified,
           image: project.imageUrl || null,
         };
-      }).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      }).sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || 0;
+        const bTime = b.createdAt?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
       setProjects(rows);
       setProjectsLoading(false);
     }, (error) => {

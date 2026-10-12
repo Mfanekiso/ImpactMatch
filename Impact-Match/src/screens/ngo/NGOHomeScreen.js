@@ -55,6 +55,7 @@ export default function NGOHomeScreen({ navigation, route }) {
     const [recommendedSponsors, setRecommendedSponsors] = React.useState([]);
     const [loadingSponsors, setLoadingSponsors] = React.useState(true);
     const [interestStats, setInterestStats] = React.useState({ interested: 0, mutual: 0 });
+    const [liveOrganisationName, setLiveOrganisationName] = React.useState("");
     const [fontsLoaded] = useFonts({
         Manrope_400Regular,
         Manrope_500Medium,
@@ -76,6 +77,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                     getDocs(query(collection(db, "interests"), where("ngoId", "==", uid))),
                 ]);
                 const ngoProfile = profileSnap.exists() ? profileSnap.data() : {};
+                if (active) setLiveOrganisationName(ngoProfile.organisationName || "");
                 const list = sponsorsSnap.docs
                     .filter((item) => item.id !== uid && item.data().profileCompleted)
                     .map((item, index) => {
@@ -160,7 +162,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                 <View style={styles.heroBlock}>
                     <Text style={styles.heroEyebrow}>Hello</Text>
                     <Text style={styles.heroTitle}>
-                        {organisationName || user?.organisationName || "Partner"}
+                        {liveOrganisationName || user?.organisationName || organisationName || "Partner"}
                     </Text>
                     <Text style={styles.heroSubtitle}>
                         A live view of your organisation’s sponsor activity.
@@ -242,7 +244,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                 {/* Recommended Section Header */}
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Recommended for You</Text>
-                    <TouchableOpacity onPress={() => navigation.navigate("SponsorSearch")}>
+                    <TouchableOpacity onPress={() => navigation.navigate("Matches")}>
                         <Text style={styles.seeAll}>See all</Text>
                     </TouchableOpacity>
                 </View>

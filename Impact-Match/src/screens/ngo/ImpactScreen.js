@@ -96,11 +96,31 @@ export default function NgoImpactScreen() {
     // Options menu state
     const [selectedProject, setSelectedProject] = useState(null);
     const [optionsVisible, setOptionsVisible] = useState(false);
+    const [deleteProject, setDeleteProject] = useState(null);
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [deletePhase, setDeletePhase] = useState("confirm");
+    const [deleteError, setDeleteError] = useState("");
 
     // Animation references
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(20)).current;
     const barAnim = useRef(new Animated.Value(0)).current;
+    const deletePulse = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        if (deletePhase !== "deleting") {
+            deletePulse.stopAnimation();
+            deletePulse.setValue(1);
+            return undefined;
+        }
+
+        const pulse = Animated.loop(Animated.sequence([
+            Animated.timing(deletePulse, { toValue: 1.14, duration: 500, useNativeDriver: true }),
+            Animated.timing(deletePulse, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ]));
+        pulse.start();
+        return () => pulse.stop();
+    }, [deletePhase, deletePulse]);
 
     useEffect(() => {
         let unsubscribeProjects = null;
@@ -268,32 +288,39 @@ export default function NgoImpactScreen() {
             return;
         }
 
-        Alert.alert(
-            "Delete Project",
-            `Are you sure you want to delete "${project.title}"? This action cannot be undone.`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            const currentUser = auth.currentUser;
-                            if (!currentUser || (project.ngoOwnerId !== currentUser.uid && project.ownerId !== currentUser.uid)) {
-                                Alert.alert("Access denied", "You are not allowed to delete this project.");
-                                return;
-                            }
-                            await deleteDoc(doc(db, "projects", project.id));
-                            setSelectedProject(null);
-                            Alert.alert("Project deleted", "The project has been removed from the database.");
-                        } catch (error) {
-                            console.error("Project deletion failed:", error);
-                            Alert.alert("Could not delete project", error.message);
-                        }
-                    },
-                },
-            ]
-        );
+        setDeleteProject(project);
+        setDeleteError("");
+        setDeletePhase("confirm");
+        setDeleteModalVisible(true);
+    };
+
+    const confirmDeleteProject = async () => {
+        if (!deleteProject || deletePhase === "deleting") return;
+        const currentUser = auth.currentUser;
+        if (!currentUser || (deleteProject.ngoOwnerId !== currentUser.uid && deleteProject.ownerId !== currentUser.uid)) {
+            setDeleteError("You are not allowed to delete this project.");
+            return;
+        }
+
+        setDeleteError("");
+        setDeletePhase("deleting");
+        try {
+            await deleteDoc(doc(db, "projects", deleteProject.id));
+            setSelectedProject(null);
+            setDeletePhase("success");
+        } catch (error) {
+            console.error("Project deletion failed:", error);
+            setDeleteError(error.message || "Please try again.");
+            setDeletePhase("error");
+        }
+    };
+
+    const closeDeleteModal = () => {
+        if (deletePhase === "deleting") return;
+        setDeleteModalVisible(false);
+        setDeleteProject(null);
+        setDeleteError("");
+        setDeletePhase("confirm");
     };
 
     const totalRaised = projects.reduce((total, project) => total + (Number(project.raisedAmount) || 0), 0);
@@ -586,6 +613,72 @@ export default function NgoImpactScreen() {
                         </View>
                     </TouchableOpacity>
                 </Modal>
+
+                <Modal visible={deleteModalVisible} animationType="fade" transparent onRequestClose={closeDeleteModal}>
+                    <View style={styles.deleteOverlay}>
+                        <View style={styles.deleteDialog}>
+                            {deletePhase === "confirm" && (
+                                <>
+                                    <View style={styles.deleteIconWrap}>
+                                        <Ionicons name="trash-outline" size={28} color={COLORS.danger} />
+                                    </View>
+                                    <Text style={styles.deleteTitle}>Delete this project?</Text>
+                                    <Text style={styles.deleteMessage}>
+                                        Are you sure you want to delete “{deleteProject?.title || "this project"}”? This action cannot be undone.
+                                    </Text>
+                                    {deleteError ? <Text style={styles.deleteError}>{deleteError}</Text> : null}
+                                    <View style={styles.deleteActions}>
+                                        <TouchableOpacity style={styles.deleteNoButton} onPress={closeDeleteModal}>
+                                            <Text style={styles.deleteNoText}>No, keep it</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={styles.deleteYesButton} onPress={confirmDeleteProject}>
+                                            <Text style={styles.deleteYesText}>Yes, delete</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </>
+                            )}
+                            {deletePhase === "deleting" && (
+                                <>
+                                    <Animated.View style={[styles.deleteIconWrap, styles.deleteProgressIcon, { transform: [{ scale: deletePulse }] }]}>
+                                        <Ionicons name="trash" size={28} color={COLORS.danger} />
+                                    </Animated.View>
+                                    <ActivityIndicator size="small" color={COLORS.danger} style={styles.deleteSpinner} />
+                                    <Text style={styles.deleteTitle}>Deleting project</Text>
+                                    <Text style={styles.deleteMessage}>“{deleteProject?.title || "Your project"}” is being deleted…</Text>
+                                </>
+                            )}
+                            {deletePhase === "success" && (
+                                <>
+                                    <View style={[styles.deleteIconWrap, styles.deleteSuccessIcon]}>
+                                        <Ionicons name="checkmark" size={30} color={COLORS.emerald} />
+                                    </View>
+                                    <Text style={styles.deleteTitle}>Project deleted</Text>
+                                    <Text style={styles.deleteMessage}>“{deleteProject?.title || "Your project"}” has been successfully deleted.</Text>
+                                    <TouchableOpacity style={styles.deleteDoneButton} onPress={closeDeleteModal}>
+                                        <Text style={styles.deleteYesText}>Done</Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
+                            {deletePhase === "error" && (
+                                <>
+                                    <View style={styles.deleteIconWrap}>
+                                        <Ionicons name="alert-circle-outline" size={30} color={COLORS.danger} />
+                                    </View>
+                                    <Text style={styles.deleteTitle}>Could not delete project</Text>
+                                    <Text style={styles.deleteMessage}>{deleteError}</Text>
+                                    <View style={styles.deleteActions}>
+                                        <TouchableOpacity style={styles.deleteNoButton} onPress={closeDeleteModal}>
+                                            <Text style={styles.deleteNoText}>Close</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={styles.deleteYesButton} onPress={() => { setDeleteError(""); setDeletePhase("confirm"); }}>
+                                            <Text style={styles.deleteYesText}>Try again</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </>
+                            )}
+                        </View>
+                    </View>
+                </Modal>
             </View>
         </SafeAreaView>
     );
@@ -673,4 +766,21 @@ const styles = StyleSheet.create({
     optionTextDelete: { fontFamily: "Manrope_600SemiBold", fontSize: 15, color: COLORS.danger },
     cancelOptionItem: { marginTop: 16, paddingVertical: 16, backgroundColor: COLORS.background, borderRadius: 16, alignItems: "center" },
     cancelOptionText: { fontFamily: "Manrope_700Bold", fontSize: 15, color: COLORS.textSecondary },
+
+    /* Delete confirmation and progress modal */
+    deleteOverlay: { flex: 1, backgroundColor: "rgba(67, 51, 39, 0.48)", justifyContent: "center", alignItems: "center", padding: 24 },
+    deleteDialog: { width: "100%", maxWidth: 420, backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, alignItems: "center", ...softShadow },
+    deleteIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.dangerSoft, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+    deleteProgressIcon: { backgroundColor: COLORS.dangerSoft },
+    deleteSuccessIcon: { backgroundColor: COLORS.emeraldSoft },
+    deleteSpinner: { marginTop: -8, marginBottom: 12 },
+    deleteTitle: { fontFamily: "Manrope_700Bold", fontSize: 19, color: COLORS.textPrimary, textAlign: "center" },
+    deleteMessage: { fontFamily: "Manrope_500Medium", fontSize: 14, lineHeight: 21, color: COLORS.textSecondary, textAlign: "center", marginTop: 8 },
+    deleteError: { fontFamily: "Manrope_600SemiBold", fontSize: 13, color: COLORS.danger, textAlign: "center", marginTop: 12 },
+    deleteActions: { flexDirection: "row", width: "100%", gap: 12, marginTop: 24 },
+    deleteNoButton: { flex: 1, paddingVertical: 14, borderRadius: 24, backgroundColor: COLORS.background, alignItems: "center", justifyContent: "center" },
+    deleteNoText: { fontFamily: "Manrope_700Bold", fontSize: 14, color: COLORS.textSecondary },
+    deleteYesButton: { flex: 1, paddingVertical: 14, borderRadius: 24, backgroundColor: COLORS.danger, alignItems: "center", justifyContent: "center" },
+    deleteYesText: { fontFamily: "Manrope_700Bold", fontSize: 14, color: COLORS.white },
+    deleteDoneButton: { width: "100%", paddingVertical: 14, borderRadius: 24, backgroundColor: COLORS.buttonDark, alignItems: "center", justifyContent: "center", marginTop: 24 },
 });

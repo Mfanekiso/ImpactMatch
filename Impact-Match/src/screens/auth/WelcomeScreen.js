@@ -66,9 +66,10 @@ export default function WelcomeScreen({ navigation }) {
                         
                         {/* Top Logo */}
                         <View style={styles.header}>
-                            <View style={styles.logoBadge}>
-                                <Ionicons name="leaf" size={16} color={COLORS.primary} />
-                            </View>
+                            {/* <View style={styles.logoBadge}> */}
+                                {/* <Ionicons name="leaf" size={16} color={COLORS.primary} /> */}
+                            {/* </View> */}
+                            
                             <Text style={styles.logoText}>
                                 IMPACT<Text style={styles.logoHighlight}>MATCH</Text>
                             </Text>

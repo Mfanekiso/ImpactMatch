@@ -11,6 +11,8 @@ import {
     ActivityIndicator,
     Alert,
     Platform,
+    Modal,
+    TextInput,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as ImagePicker from "expo-image-picker";
@@ -25,8 +27,15 @@ import {
 // Firebase imports
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { signOut } from "firebase/auth";
+import {
+    EmailAuthProvider,
+    reauthenticateWithCredential,
+    signOut,
+    updateEmail,
+    updatePassword,
+} from "firebase/auth";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import { cacheProfile } from "../../utils/profileCache";
 
 // ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
 const COLORS = {
@@ -63,6 +72,14 @@ export default function NGOProfileScreen({ navigation }) {
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
+    const [editVisible, setEditVisible] = useState(false);
+    const [passwordVisible, setPasswordVisible] = useState(false);
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
+    const [editValues, setEditValues] = useState({});
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
 
     const uid = auth.currentUser?.uid;
 
@@ -71,7 +88,17 @@ export default function NGOProfileScreen({ navigation }) {
         try {
             const snap = await getDoc(doc(db, "users", uid));
             if (snap.exists()) {
-                setProfile(snap.data());
+                const data = snap.data();
+                setProfile(data);
+                setEditValues({
+                    full_name: data.full_name || "",
+                    organisationName: data.organisationName || "",
+                    email: data.email || auth.currentUser?.email || "",
+                    location: data.location || "",
+                    mission: data.mission || "",
+                    fundingRequired: data.fundingRequired == null ? "" : String(data.fundingRequired),
+                    targetCommunity: data.targetCommunity || "",
+                });
             }
         } catch (error) {
             Alert.alert("Error Loading Profile", error.message);
@@ -144,6 +171,104 @@ export default function NGOProfileScreen({ navigation }) {
         }
     };
 
+    const handleBack = () => {
+        if (navigation.canGoBack()) {
+            navigation.goBack();
+        } else {
+            navigation.navigate("MainTabs", { screen: "Home" });
+        }
+    };
+
+    const handleSaveProfile = async () => {
+        const user = auth.currentUser;
+        if (!user) {
+            Alert.alert("Sign in required", "Please sign in again to update your profile.");
+            return;
+        }
+        const updated = {
+            full_name: (editValues.full_name || "").trim(),
+            organisationName: (editValues.organisationName || "").trim(),
+            email: (editValues.email || "").trim(),
+            location: (editValues.location || "").trim(),
+            mission: (editValues.mission || "").trim(),
+            fundingRequired: (editValues.fundingRequired || "").trim(),
+            targetCommunity: (editValues.targetCommunity || "").trim(),
+        };
+        if (!updated.organisationName || !updated.email) {
+            Alert.alert("Missing information", "Organisation name and email are required.");
+            return;
+        }
+        if (updated.email !== (user.email || "") && !currentPassword) {
+            Alert.alert("Current password required", "Enter your current password to change your email address.");
+            return;
+        }
+
+        setSavingProfile(true);
+        try {
+            if (updated.email !== (user.email || "")) {
+                const credential = EmailAuthProvider.credential(user.email, currentPassword);
+                await reauthenticateWithCredential(user, credential);
+                await updateEmail(user, updated.email);
+            }
+            await updateDoc(doc(db, "users", user.uid), updated);
+            const nextProfile = { ...profile, ...updated };
+            setProfile(nextProfile);
+            await cacheProfile(user.uid, nextProfile);
+            setEditVisible(false);
+            setCurrentPassword("");
+            Alert.alert("Profile updated", "Your profile changes have been saved.");
+        } catch (error) {
+            console.error("NGO profile update failed:", error);
+            const message = error.code === "auth/requires-recent-login"
+                ? "Please sign out and sign in again before changing your email."
+                : error.message || "Please try again.";
+            Alert.alert("Could not update profile", message);
+        } finally {
+            setSavingProfile(false);
+        }
+    };
+
+    const handleChangePassword = async () => {
+        const user = auth.currentUser;
+        if (!user?.email) {
+            Alert.alert("Unable to change password", "This account does not have an email and password sign-in.");
+            return;
+        }
+        if (!currentPassword || newPassword.length < 6) {
+            Alert.alert("Check your password", "Enter your current password and a new password with at least 6 characters.");
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Alert.alert("Passwords do not match", "Please enter the same new password in both fields.");
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+            await reauthenticateWithCredential(user, credential);
+            await updatePassword(user, newPassword);
+            setPasswordVisible(false);
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+            Alert.alert("Password changed", "Your password has been updated.");
+        } catch (error) {
+            console.error("Password update failed:", error);
+            const message = error.code === "auth/wrong-password" || error.code === "auth/invalid-credential"
+                ? "Your current password is incorrect."
+                : error.message || "Please try again.";
+            Alert.alert("Could not change password", message);
+        } finally {
+            setChangingPassword(false);
+        }
+    };
+
+    const openEditProfile = () => {
+        setCurrentPassword("");
+        setEditVisible(true);
+    };
+
     if (!fontsLoaded) {
         return null;
     }
@@ -180,7 +305,7 @@ export default function NGOProfileScreen({ navigation }) {
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                
+
                 <View style={styles.imageContainer}>
                     <Image
                         source={{ uri: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&q=80&w=1000" }}
@@ -188,6 +313,16 @@ export default function NGOProfileScreen({ navigation }) {
                         resizeMode="cover"
                     />
                     <View style={styles.coverOverlay} />
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back to home"
+                        onPress={handleBack}
+                    >
+                        <Ionicons name="arrow-back" size={21} color={COLORS.white} />
+                        <Text style={styles.backButtonText}>Back</Text>
+                    </TouchableOpacity>
                 </View>
 
                 <View style={styles.profileHeader}>
@@ -233,6 +368,22 @@ export default function NGOProfileScreen({ navigation }) {
                     </Text>
                 </View>
 
+                <View style={styles.profileActions}>
+                    <TouchableOpacity style={styles.profileActionButton} activeOpacity={0.85} onPress={openEditProfile}>
+                        <Ionicons name="create-outline" size={18} color={COLORS.white} />
+                        <Text style={styles.profileActionPrimaryText}>Edit profile details</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.passwordActionButton} activeOpacity={0.85} onPress={() => {
+                        setCurrentPassword("");
+                        setNewPassword("");
+                        setConfirmPassword("");
+                        setPasswordVisible(true);
+                    }}>
+                        <Ionicons name="lock-closed-outline" size={18} color={COLORS.textPrimary} />
+                        <Text style={styles.profileActionSecondaryText}>Change password</Text>
+                    </TouchableOpacity>
+                </View>
+
                 <View style={styles.menuContainer}>
                     {profileMenuItems.map((item, index) => (
                         <View key={item.id} style={[styles.menuItem, index === profileMenuItems.length - 1 && styles.menuItemLast]}>
@@ -255,6 +406,85 @@ export default function NGOProfileScreen({ navigation }) {
                     <Text style={styles.signOutText}>Sign Out</Text>
                 </TouchableOpacity>
             </ScrollView>
+
+            <Modal visible={editVisible} transparent animationType="slide" onRequestClose={() => !savingProfile && setEditVisible(false)}>
+                <View style={styles.formOverlay}>
+                    <View style={styles.formDialog}>
+                        <Text style={styles.formTitle}>Edit profile details</Text>
+                        <Text style={styles.formSubtitle}>Changes are saved to your profile and used throughout the app.</Text>
+                        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                            {[
+                                ["full_name", "Contact person", "Your full name"],
+                                ["organisationName", "Organisation name", "Organisation name"],
+                                ["email", "Email address", "name@example.com"],
+                                ["location", "Location", "City, province"],
+                                ["mission", "Mission & causes", "What your organisation does"],
+                                ["fundingRequired", "Funding required (ZAR)", "e.g. 250000"],
+                                ["targetCommunity", "Communities served", "Community or cause"],
+                            ].map(([key, label, placeholder]) => (
+                                <View key={key}>
+                                    <Text style={styles.inputLabel}>{label}</Text>
+                                    <TextInput
+                                        style={[styles.formInput, key === "mission" && styles.formMultiline]}
+                                        value={editValues[key] || ""}
+                                        onChangeText={(value) => setEditValues((previous) => ({ ...previous, [key]: value }))}
+                                        placeholder={placeholder}
+                                        placeholderTextColor={COLORS.textSecondary}
+                                        autoCapitalize={key === "email" ? "none" : "sentences"}
+                                        keyboardType={key === "email" ? "email-address" : key === "fundingRequired" ? "decimal-pad" : "default"}
+                                        multiline={key === "mission"}
+                                    />
+                                </View>
+                            ))}
+                            {editValues.email?.trim() !== (auth.currentUser?.email || "") && (
+                                <View>
+                                    <Text style={styles.inputLabel}>Current password (to change email)</Text>
+                                    <TextInput
+                                        style={styles.formInput}
+                                        value={currentPassword}
+                                        onChangeText={setCurrentPassword}
+                                        placeholder="Enter your current password"
+                                        placeholderTextColor={COLORS.textSecondary}
+                                        secureTextEntry
+                                        autoCapitalize="none"
+                                    />
+                                </View>
+                            )}
+                        </ScrollView>
+                        <View style={styles.formActions}>
+                            <TouchableOpacity style={styles.formCancelButton} disabled={savingProfile} onPress={() => setEditVisible(false)}>
+                                <Text style={styles.formCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.formSaveButton} disabled={savingProfile} onPress={handleSaveProfile}>
+                                {savingProfile ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={styles.formSaveText}>Save changes</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal visible={passwordVisible} transparent animationType="fade" onRequestClose={() => !changingPassword && setPasswordVisible(false)}>
+                <View style={styles.formOverlay}>
+                    <View style={styles.formDialog}>
+                        <Text style={styles.formTitle}>Change password</Text>
+                        <Text style={styles.formSubtitle}>Confirm your current password to secure this change.</Text>
+                        <Text style={styles.inputLabel}>Current password</Text>
+                        <TextInput style={styles.formInput} value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry placeholder="Current password" placeholderTextColor={COLORS.textSecondary} autoCapitalize="none" />
+                        <Text style={styles.inputLabel}>New password</Text>
+                        <TextInput style={styles.formInput} value={newPassword} onChangeText={setNewPassword} secureTextEntry placeholder="At least 6 characters" placeholderTextColor={COLORS.textSecondary} autoCapitalize="none" />
+                        <Text style={styles.inputLabel}>Confirm new password</Text>
+                        <TextInput style={styles.formInput} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry placeholder="Enter the new password again" placeholderTextColor={COLORS.textSecondary} autoCapitalize="none" />
+                        <View style={styles.formActions}>
+                            <TouchableOpacity style={styles.formCancelButton} disabled={changingPassword} onPress={() => setPasswordVisible(false)}>
+                                <Text style={styles.formCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.formSaveButton} disabled={changingPassword} onPress={handleChangePassword}>
+                                {changingPassword ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={styles.formSaveText}>Update password</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -271,6 +501,41 @@ const styles = StyleSheet.create({
     scrollContent: { 
         paddingBottom: 120 
     },
+    profileActions: {
+        gap: 10,
+        marginHorizontal: 24,
+        marginTop: 16,
+    },
+    profileActionButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        paddingVertical: 14,
+        borderRadius: 18,
+        backgroundColor: COLORS.textPrimary,
+    },
+    profileActionPrimaryText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 14,
+        color: COLORS.white,
+    },
+    passwordActionButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        paddingVertical: 13,
+        borderRadius: 18,
+        backgroundColor: COLORS.surface,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    profileActionSecondaryText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 14,
+        color: COLORS.textPrimary,
+    },
     imageContainer: {
         position: 'relative',
     },
@@ -285,6 +550,23 @@ const styles = StyleSheet.create({
         right: 0,
         bottom: 0,
         backgroundColor: 'rgba(67, 51, 39, 0.1)', 
+    },
+    backButton: {
+        position: "absolute",
+        top: 16,
+        left: 20,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 22,
+        backgroundColor: "rgba(67, 51, 39, 0.72)",
+    },
+    backButtonText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 13,
+        color: COLORS.white,
     },
     profileHeader: { 
         flexDirection: "row", 
@@ -451,5 +733,84 @@ const styles = StyleSheet.create({
         fontSize: 16, 
         color: COLORS.danger,
         letterSpacing: 0.3,
+    },
+    formOverlay: {
+        flex: 1,
+        justifyContent: "center",
+        backgroundColor: "rgba(67, 51, 39, 0.5)",
+        padding: 18,
+    },
+    formDialog: {
+        maxHeight: "90%",
+        backgroundColor: COLORS.surface,
+        borderRadius: 24,
+        padding: 22,
+        ...softShadow,
+    },
+    formTitle: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 20,
+        color: COLORS.textPrimary,
+    },
+    formSubtitle: {
+        fontFamily: "Manrope_500Medium",
+        fontSize: 13,
+        color: COLORS.textSecondary,
+        lineHeight: 19,
+        marginTop: 5,
+        marginBottom: 12,
+    },
+    inputLabel: {
+        fontFamily: "Manrope_600SemiBold",
+        fontSize: 13,
+        color: COLORS.textPrimary,
+        marginTop: 10,
+        marginBottom: 5,
+    },
+    formInput: {
+        fontFamily: "Manrope_500Medium",
+        fontSize: 14,
+        color: COLORS.textPrimary,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: 12,
+        backgroundColor: COLORS.background,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+    },
+    formMultiline: {
+        minHeight: 78,
+        textAlignVertical: "top",
+    },
+    formActions: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 18,
+    },
+    formCancelButton: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 13,
+        borderRadius: 22,
+        backgroundColor: COLORS.background,
+    },
+    formCancelText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 13,
+        color: COLORS.textSecondary,
+    },
+    formSaveButton: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 13,
+        borderRadius: 22,
+        backgroundColor: COLORS.textPrimary,
+    },
+    formSaveText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 13,
+        color: COLORS.white,
     },
 });

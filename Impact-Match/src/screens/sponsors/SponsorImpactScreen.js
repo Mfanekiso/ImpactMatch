@@ -10,7 +10,10 @@ import {
   StatusBar,
   Animated,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../../../Backend/firebaseConfig";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import {
   useFonts,
@@ -47,13 +50,6 @@ const softShadow = {
 };
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────
-const SUMMARY_STATS = [
-  { id: "1", label: "Funding", value: "R4.2M", bgColor: COLORS.primarySoft, color: COLORS.buttonDark },
-  { id: "2", label: "Partners", value: "6", bgColor: COLORS.emeraldSoft, color: COLORS.emerald },
-  { id: "3", label: "Projects", value: "9", bgColor: COLORS.surface, color: COLORS.textPrimary, border: COLORS.border },
-  { id: "4", label: "People", value: "94k", bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
-];
-
 const BENEFICIARY_POINTS = [
   { month: "Mar", val: 40 },
   { month: "Apr", val: 52 },
@@ -71,48 +67,6 @@ const FUNDING_BY_CAUSE = [
   { cause: "Other", percentage: 9, heightPct: 0.22 },
 ];
 
-const ACTIVE_PROJECTS = [
-  {
-    id: "proj-1",
-    title: "Digital Learning Centre",
-    org: "Education For All",
-    beneficiaries: "3,200 beneficiaries",
-    status: "Active",
-    statusType: "active",
-    raised: "R180,000",
-    goal: "R300,000",
-    ratio: 0.6,
-    percent: "60%",
-    image: "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=200&auto=format&fit=crop",
-  },
-  {
-    id: "proj-2",
-    title: "Fynbos Restoration",
-    org: "GreenRoots Africa",
-    beneficiaries: "1,200 beneficiaries",
-    status: "Fully Funded",
-    statusType: "completed",
-    raised: "R220,000",
-    goal: "R220,000",
-    ratio: 1.0,
-    percent: "100%",
-    image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=200&auto=format&fit=crop",
-  },
-  {
-    id: "proj-3",
-    title: "Mobile Maternal Clinic",
-    org: "Umunthu Health Trust",
-    beneficiaries: "4,800 beneficiaries",
-    status: "Active",
-    statusType: "active",
-    raised: "R280,000",
-    goal: "R800,000",
-    ratio: 0.35,
-    percent: "35%",
-    image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=200&auto=format&fit=crop",
-  },
-];
-
 export default function ImpactDashboardScreen() {
   const [fontsLoaded] = useFonts({
     Manrope_400Regular,
@@ -120,10 +74,45 @@ export default function ImpactDashboardScreen() {
     Manrope_600SemiBold,
     Manrope_700Bold,
   });
+  const [projects, setProjects] = React.useState([]);
+  const [projectsLoading, setProjectsLoading] = React.useState(true);
+  const [projectsError, setProjectsError] = React.useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const barAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, "projects"),
+        where("status", "in", ["open", "active", "Active", "completed", "Completed"])
+      ),
+      (snapshot) => {
+        const rows = snapshot.docs.map((projectDoc) => ({ id: projectDoc.id, ...projectDoc.data() }));
+        rows.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        setProjects(rows);
+        setProjectsLoading(false);
+        setProjectsError(false);
+      },
+      (error) => {
+        console.warn("Could not load sponsor impact projects:", error?.message);
+        setProjectsLoading(false);
+        setProjectsError(true);
+      }
+    );
+    return unsubscribe;
+  }, []);
+
+  const totalFundingGoal = projects.reduce((sum, project) => sum + (Number(project.fundingGoal ?? project.goalAmount) || 0), 0);
+  const totalPartners = new Set(projects.map((project) => project.orgName || project.ngoName).filter(Boolean)).size;
+  const totalPeople = projects.reduce((sum, project) => sum + (Number(project.beneficiariesCount ?? project.beneficiaries) || 0), 0);
+  const summaryStats = [
+    { id: "1", label: "Funding", value: `R${totalFundingGoal.toLocaleString("en-ZA")}`, bgColor: COLORS.primarySoft, color: COLORS.buttonDark },
+    { id: "2", label: "Partners", value: String(totalPartners), bgColor: COLORS.emeraldSoft, color: COLORS.emerald },
+    { id: "3", label: "Projects", value: String(projects.length), bgColor: COLORS.surface, color: COLORS.textPrimary, border: COLORS.border },
+    { id: "4", label: "People", value: totalPeople.toLocaleString("en-ZA"), bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
+  ];
 
   useEffect(() => {
     Animated.parallel([
@@ -164,7 +153,7 @@ export default function ImpactDashboardScreen() {
 
             {/* Top Stat Cards Grid */}
             <View style={styles.statsGrid}>
-              {SUMMARY_STATS.map((stat) => (
+              {summaryStats.map((stat) => (
                 <View 
                   key={stat.id} 
                   style={[
@@ -295,10 +284,31 @@ export default function ImpactDashboardScreen() {
 
           {/* Section 3: Active Project Impact */}
           <Text style={styles.sectionHeaderTitle}>Active Project Impact</Text>
-          {ACTIVE_PROJECTS.map((project) => (
+          {projectsLoading ? (
+            <ActivityIndicator size="large" color={COLORS.buttonDark} style={{ marginVertical: 24 }} />
+          ) : projectsError ? (
+            <View style={styles.projectsEmpty}>
+              <Text style={styles.emptyProjectText}>Projects could not be loaded. Check your connection and try again.</Text>
+            </View>
+          ) : projects.length === 0 ? (
+            <View style={styles.projectsEmpty}>
+              <Text style={styles.emptyProjectText}>No projects have been published yet.</Text>
+            </View>
+          ) : projects.map((project) => {
+            const goal = Number(project.fundingGoal ?? project.goalAmount) || 0;
+            const raised = Number(project.raisedAmount) || 0;
+            const ratio = goal > 0 ? Math.min(raised / goal, 1) : 0;
+            const beneficiaryCount = Number(project.beneficiariesCount ?? project.beneficiaries) || 0;
+            const status = project.status || "Active";
+            const completed = ["completed", "closed", "fully funded"].includes(String(status).toLowerCase());
+            return (
             <TouchableOpacity key={project.id} activeOpacity={0.8} style={styles.projectCard}>
               <View style={styles.projectCardHeader}>
-                <Image source={{ uri: project.image }} style={styles.projectThumb} />
+                {project.imageUrl ? (
+                  <Image source={{ uri: project.imageUrl }} style={styles.projectThumb} />
+                ) : (
+                  <View style={[styles.projectThumb, styles.projectImageFallback]} />
+                )}
                 <View style={styles.projectMeta}>
                   <View style={styles.projectTitleRow}>
                     <Text style={styles.projectTitle} numberOfLines={1}>
@@ -307,7 +317,7 @@ export default function ImpactDashboardScreen() {
                     <View
                       style={[
                         styles.statusBadge,
-                        project.statusType === "completed"
+                        completed
                           ? styles.statusBadgeCompleted
                           : styles.statusBadgeActive,
                       ]}
@@ -315,18 +325,18 @@ export default function ImpactDashboardScreen() {
                       <Text
                         style={[
                           styles.statusBadgeText,
-                          project.statusType === "completed"
+                          completed
                             ? styles.statusTextCompleted
                             : styles.statusTextActive,
                         ]}
                       >
-                        {project.status}
+                        {status}
                       </Text>
                     </View>
                   </View>
 
-                  <Text style={styles.projectOrg}>{project.org}</Text>
-                  <Text style={styles.projectBeneficiaries}>{project.beneficiaries}</Text>
+                  <Text style={styles.projectOrg}>{project.orgName || project.ngoName || "Community organisation"}</Text>
+                  <Text style={styles.projectBeneficiaries}>{beneficiaryCount.toLocaleString("en-ZA")} beneficiaries</Text>
                 </View>
               </View>
 
@@ -338,7 +348,7 @@ export default function ImpactDashboardScreen() {
                     {
                       width: barAnim.interpolate({
                         inputRange: [0, 1],
-                        outputRange: ["0%", `${project.ratio * 100}%`],
+                        outputRange: ["0%", `${ratio * 100}%`],
                       }),
                     },
                   ]}
@@ -346,13 +356,14 @@ export default function ImpactDashboardScreen() {
               </View>
 
               <View style={styles.progressValueRow}>
-                <Text style={styles.raisedText}>{project.raised} raised</Text>
+                <Text style={styles.raisedText}>R{raised.toLocaleString("en-ZA")} raised</Text>
                 <Text style={styles.goalText}>
-                  {project.percent} of {project.goal}
+                  {Math.round(ratio * 100)}% of R{goal.toLocaleString("en-ZA")}
                 </Text>
               </View>
             </TouchableOpacity>
-          ))}
+          );
+          })}
 
           {/* Section 4: Impact Stories */}
           <Text style={styles.sectionHeaderTitle}>Impact Stories</Text>
@@ -540,6 +551,9 @@ const styles = StyleSheet.create({
   },
   projectCardHeader: { flexDirection: "row" },
   projectThumb: { width: 56, height: 56, borderRadius: 12, marginRight: 16 },
+  projectImageFallback: { backgroundColor: COLORS.primarySoft },
+  projectsEmpty: { backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 20, marginBottom: 16 },
+  emptyProjectText: { fontFamily: "Manrope_500Medium", fontSize: 14, color: COLORS.textSecondary, textAlign: "center", lineHeight: 21 },
   projectMeta: { flex: 1, justifyContent: "center" },
   projectTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   projectTitle: { 
