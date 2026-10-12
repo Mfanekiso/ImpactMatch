@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+    ActivityIndicator,
+    Animated,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import NetInfo from "@react-native-community/netinfo";
 import { onAuthStateChanged } from "firebase/auth";
@@ -69,14 +77,17 @@ export default function App() {
     }
 
     return (
-        <SafeAreaView style={styles.app}>
-            <AppNavigator {...boot} />
-            {offline && <OfflineNotice />}
-        </SafeAreaView>
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+            <View style={styles.app}>
+                <AppNavigator {...boot} />
+                {offline && <OfflineNotice />}
+            </View>
+        </SafeAreaProvider>
     );
 }
 
 function OfflineNotice() {
+    const insets = useSafeAreaInsets();
     const entrance = useRef(new Animated.Value(0)).current;
     const hover = useRef(new Animated.Value(1)).current;
     const animateHover = (value) => Animated.spring(hover, {
@@ -96,7 +107,7 @@ function OfflineNotice() {
             style={[styles.offlineBanner, {
                 opacity: entrance,
                 transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }, { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }],
-            }]}
+            }, { top: insets.top + 9 }]}
         >
             <Pressable
                 onHoverIn={() => animateHover(1.015)}

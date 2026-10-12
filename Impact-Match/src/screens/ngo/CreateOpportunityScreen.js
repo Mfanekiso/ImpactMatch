@@ -1,11 +1,11 @@
 
+import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
     ScrollView,
     StatusBar,
     StyleSheet,

@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  Modal,
-  SafeAreaView,
-  StatusBar,
-  ActivityIndicator,
-  Alert,
+    View,
+    Text,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
+    ScrollView,
+    Image,
+    Modal,
+    StatusBar,
+    ActivityIndicator,
+    Alert,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import {

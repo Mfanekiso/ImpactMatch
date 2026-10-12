@@ -1,16 +1,16 @@
 import React, { useEffect, useRef } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  Animated,
-  Dimensions,
-  ActivityIndicator,
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    Image,
+    TouchableOpacity,
+    StatusBar,
+    Animated,
+    Dimensions,
+    ActivityIndicator,
 } from "react-native";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../../Backend/firebaseConfig";

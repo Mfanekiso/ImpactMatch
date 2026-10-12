@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
     View,
     Text,
     ScrollView,
     TouchableOpacity,
     StyleSheet,
-    SafeAreaView,
     StatusBar,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";

@@ -1,4 +1,5 @@
 import React from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
     Modal,
     View,
@@ -8,7 +9,6 @@ import {
     StyleSheet,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
     ActivityIndicator,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";

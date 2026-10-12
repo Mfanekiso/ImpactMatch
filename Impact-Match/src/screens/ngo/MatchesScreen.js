@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View, FlatList } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+    ActivityIndicator,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+    FlatList,
+} from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
