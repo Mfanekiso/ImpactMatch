@@ -21,7 +21,19 @@
     "plugins": [
       "expo-status-bar",
       "expo-asset",
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#10B981"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "4aaace7d-fe83-41db-908c-ef9278a47477"
+      }
+    },
+    "owner": "ta_dini"
   }
 }
