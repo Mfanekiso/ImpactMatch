@@ -30,6 +30,7 @@ import {
 } from "firebase/firestore";
 
 import { auth, db } from "../../../Backend/firebaseConfig";
+import { sendPushToUser } from "../../utils/pushNotifications";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -147,6 +148,15 @@ export default function ChatScreen({ navigation, route }) {
             await batch.commit();
 
             setMessageText("");
+
+            // Push notification to the other person (does not block the chat)
+            const senderName =
+                conversationSnapshot.data()?.participantDetails?.[currentUser.uid]?.name || "New message";
+            sendPushToUser(recipientId, {
+                title: senderName,
+                body: text.length > 120 ? `${text.slice(0, 117)}...` : text,
+                data: { type: "message", conversationId, senderName },
+            });
         } catch (error) {
             console.log("Send message error:", error);
         }

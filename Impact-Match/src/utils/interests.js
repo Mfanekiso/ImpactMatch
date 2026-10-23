@@ -23,6 +23,7 @@ import {
 
 import { auth, db } from "../../Backend/firebaseConfig";
 import { writeFirestoreOrQueue } from "./offlineWrites";
+import { sendPushToUser, getDisplayName } from "./pushNotifications";
 
 export const interestDocId = (sponsorId, ngoId) => `${sponsorId}_${ngoId}`;
 
@@ -57,12 +58,23 @@ export async function updateInterest(ngoId, changes) {
     if (!sponsorId) throw new Error("Please log in again.");
     if (!ngoId) throw new Error("Missing organisation id.");
 
-    await writeFirestoreOrQueue("interests", interestDocId(sponsorId, ngoId), {
+    const result = await writeFirestoreOrQueue("interests", interestDocId(sponsorId, ngoId), {
             sponsorId,
             ngoId,
             ...changes,
             updatedAt: new Date().toISOString(),
         });
+
+    // Tell the NGO a sponsor is interested (only when the write reached Firestore)
+    if (changes.interested === true && !result?.queued) {
+        const sponsorName = await getDisplayName(sponsorId, "A sponsor");
+        sendPushToUser(ngoId, {
+            title: "New sponsor interest",
+            body: `${sponsorName} is interested in partnering with you. Open Matches to respond.`,
+            data: { type: "interest", sponsorId },
+        });
+    }
+    return result;
 }
 
 export const setSaved = (ngoId, saved) => updateInterest(ngoId, { saved: !!saved });

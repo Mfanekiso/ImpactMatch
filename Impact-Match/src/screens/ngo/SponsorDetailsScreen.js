@@ -13,6 +13,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { auth } from "../../../Backend/firebaseConfig";
 import { interestDocId } from "../../utils/interests";
 import { writeFirestoreOrQueue } from "../../utils/offlineWrites";
+import { sendPushToUser, getDisplayName } from "../../utils/pushNotifications";
 import {
     useFonts,
     Manrope_400Regular,
@@ -67,6 +68,14 @@ export default function SponsorDetailsScreen({ route, navigation }) {
                 ngoInterested: true,
                 updatedAt: new Date().toISOString(),
             });
+            if (!result.queued) {
+                const ngoName = await getDisplayName(ngoId, "An organisation");
+                sendPushToUser(sponsor.id, {
+                    title: "An NGO is interested in you",
+                    body: `${ngoName} wants to partner with you. If you're interested too, it's a mutual match!`,
+                    data: { type: "interest", ngoId },
+                });
+            }
             Alert.alert(result.queued ? "Saved offline" : "Interest sent", result.queued
                 ? `Your interest for ${sponsor.name} will sync when you’re back online.`
                 : `Your interest has been sent to ${sponsor.name}.`);
