@@ -35,6 +35,7 @@ import {
     updatePassword,
 } from "firebase/auth";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import { removePushTokenForUser } from "../../utils/pushNotifications";
 import { cacheProfile } from "../../utils/profileCache";
 
 // ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
@@ -164,6 +165,7 @@ export default function NGOProfileScreen({ navigation }) {
 
     const handleSignOut = async () => {
         try {
+            await removePushTokenForUser(auth.currentUser?.uid);
             await signOut(auth);
             navigation.replace("Login");
         } catch (error) {

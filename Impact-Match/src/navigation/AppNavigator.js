@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Platform, Animated, Text } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
+import { navigationRef } from "./navigationRef";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -143,7 +144,7 @@ function MainTabs({ route }) {
 // 2. Main App Navigator
 export default function AppNavigator({ initialRouteName = "Welcome", initialRouteParams }) {
     return (
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
             <Stack.Navigator
                 initialRouteName={initialRouteName}
                 screenOptions={{
