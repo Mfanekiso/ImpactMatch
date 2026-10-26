@@ -16,8 +16,8 @@ import {
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { cacheProfile } from "../../utils/profileCache";
 
@@ -98,6 +98,15 @@ export default function LoginScreen({ navigation }) {
             const user = userCredentials.user;
             const userSnap = await getDoc(doc(db, "users", user.uid));
             const userData = userSnap.exists() ? userSnap.data() : null;
+            if (userData?.accountStatus === "suspended") {
+                await signOut(auth);
+                setLoginError("This account has been suspended. Please contact support.");
+                return;
+            }
+            if (userData) {
+                await updateDoc(doc(db, "users", user.uid), { lastActiveAt: serverTimestamp() });
+                userData.lastActiveAt = new Date();
+            }
             if (userData) await cacheProfile(user.uid, userData);
 
             if (!userData || !userData.role) {

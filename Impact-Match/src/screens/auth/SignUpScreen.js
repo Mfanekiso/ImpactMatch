@@ -18,7 +18,7 @@ import {
 import Ionicons from "@react-native-vector-icons/ionicons";
 
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 
 const COLORS = {
@@ -91,6 +91,8 @@ export default function SignUpScreen({ navigation }) {
             await setDoc(doc(db, "users", uid), {
                 full_name: name.trim(),
                 email: email.trim(),
+                accountStatus: "active",
+                createdAt: serverTimestamp(),
             });
 
             navigation.navigate("UserType", { uid });
