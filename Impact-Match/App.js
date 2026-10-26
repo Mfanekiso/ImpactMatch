@@ -16,6 +16,7 @@ import AppNavigator from "./src/navigation/AppNavigator";
 import { auth, db } from "./Backend/firebaseConfig";
 import { cacheProfile, readCachedProfile } from "./src/utils/profileCache";
 import { flushOfflineWrites } from "./src/utils/offlineWrites";
+import { registerAndSavePushToken, listenForNotificationTaps } from "./src/utils/pushNotifications";
 
 export default function App() {
     const [boot, setBoot] = useState(null);
@@ -69,6 +70,19 @@ export default function App() {
         return () => {
             unsubscribeNetwork();
             unsubscribeAuth();
+        };
+    }, []);
+
+    // Push notifications: save this device's token whenever someone is signed in,
+    // and open the right chat when a notification is tapped.
+    useEffect(() => {
+        const unsubscribePushAuth = onAuthStateChanged(auth, (user) => {
+            if (user) registerAndSavePushToken(user.uid);
+        });
+        const stopListeningForTaps = listenForNotificationTaps();
+        return () => {
+            unsubscribePushAuth();
+            stopListeningForTaps();
         };
     }, []);
 

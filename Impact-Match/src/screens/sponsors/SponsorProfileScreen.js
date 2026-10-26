@@ -35,6 +35,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import { removePushTokenForUser } from "../../utils/pushNotifications";
 
 // ─── LUXURY COLOR PALETTE (Sponsor Twist) ──────────────────────────────
 const COLORS = {
@@ -244,6 +245,7 @@ export default function SponsorProfileScreen({ navigation }) {
 
     const handleSignOut = async () => {
         try {
+            await removePushTokenForUser(auth.currentUser?.uid);
             await signOut(auth);
             navigation.getParent?.()?.reset?.({
                 index: 0,
