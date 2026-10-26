@@ -19,6 +19,11 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // Admin dashboard totals are calculated from the platform's project records.
+    match /projects/{projectId} {
+      allow read: if isAdmin();
+    }
+
     // Users: you can read your own document (needed for the role check),
     // admins can read and manage everyone.
     match /users/{uid} {
