@@ -384,6 +384,14 @@ export default function NGOProfileScreen({ navigation }) {
                         <Ionicons name="lock-closed-outline" size={18} color={COLORS.textPrimary} />
                         <Text style={styles.profileActionSecondaryText}>Change password</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.passwordActionButton}
+                        activeOpacity={0.85}
+                        onPress={() => navigation.navigate("NGOVerification")}
+                    >
+                        <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.textPrimary} />
+                        <Text style={styles.profileActionSecondaryText}>Verify organisation</Text>
+                    </TouchableOpacity>
                 </View>
 
                 <View style={styles.menuContainer}>

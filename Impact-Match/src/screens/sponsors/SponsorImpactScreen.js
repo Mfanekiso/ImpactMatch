@@ -13,7 +13,7 @@ import {
     ActivityIndicator,
 } from "react-native";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { db } from "../../../Backend/firebaseConfig";
+import { auth, db } from "../../../Backend/firebaseConfig";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import {
   useFonts,
@@ -67,7 +67,8 @@ const FUNDING_BY_CAUSE = [
   { cause: "Other", percentage: 9, heightPct: 0.22 },
 ];
 
-export default function ImpactDashboardScreen() {
+// CHANGED: the screen now receives "navigation" so a project card can open the proposal screen
+export default function ImpactDashboardScreen({ navigation }) {
   const [fontsLoaded] = useFonts({
     Manrope_400Regular,
     Manrope_500Medium,
@@ -83,7 +84,48 @@ export default function ImpactDashboardScreen() {
   const barAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
+    const user = auth.currentUser;
+    if (!user) {
+      setProjects([]);
+      setProjectsLoading(false);
+      return undefined;
+    }
+
+    let interestedNgoIds = new Set();
+    let rawProjects = [];
+
+    const filterAndSetProjects = () => {
+      // Only include projects belonging to NGOs the sponsor has said "interested" to
+      const filtered = rawProjects.filter((p) => {
+        const ngoId = p.ngoOwnerId || p.ownerId || p.ngoId;
+        return ngoId && interestedNgoIds.has(ngoId);
+      });
+      setProjects(filtered);
+      setProjectsLoading(false);
+      setProjectsError(false);
+    };
+
+    // 1. Listen to this sponsor's expressed interests
+    const unsubInterests = onSnapshot(
+      query(collection(db, "interests"), where("sponsorId", "==", user.uid)),
+      (snapshot) => {
+        const set = new Set();
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.ngoId && data.interested === true) {
+            set.add(data.ngoId);
+          }
+        });
+        interestedNgoIds = set;
+        filterAndSetProjects();
+      },
+      (err) => {
+        console.warn("Could not load sponsor interests:", err?.message);
+      }
+    );
+
+    // 2. Listen to projects
+    const unsubProjects = onSnapshot(
       query(
         collection(db, "projects"),
         where("status", "in", ["open", "active", "Active", "completed", "Completed"])
@@ -91,9 +133,8 @@ export default function ImpactDashboardScreen() {
       (snapshot) => {
         const rows = snapshot.docs.map((projectDoc) => ({ id: projectDoc.id, ...projectDoc.data() }));
         rows.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-        setProjects(rows);
-        setProjectsLoading(false);
-        setProjectsError(false);
+        rawProjects = rows;
+        filterAndSetProjects();
       },
       (error) => {
         console.warn("Could not load sponsor impact projects:", error?.message);
@@ -101,7 +142,11 @@ export default function ImpactDashboardScreen() {
         setProjectsError(true);
       }
     );
-    return unsubscribe;
+
+    return () => {
+      unsubInterests();
+      unsubProjects();
+    };
   }, []);
 
   const totalFundingGoal = projects.reduce((sum, project) => sum + (Number(project.fundingGoal ?? project.goalAmount) || 0), 0);
@@ -291,8 +336,19 @@ export default function ImpactDashboardScreen() {
               <Text style={styles.emptyProjectText}>Projects could not be loaded. Check your connection and try again.</Text>
             </View>
           ) : projects.length === 0 ? (
-            <View style={styles.projectsEmpty}>
-              <Text style={styles.emptyProjectText}>No projects have been published yet.</Text>
+            <View style={[styles.projectsEmpty, { alignItems: "center", paddingVertical: 28 }]}>
+              <Ionicons name="heart-circle-outline" size={48} color={COLORS.emerald} style={{ marginBottom: 10 }} />
+              <Text style={styles.emptyProjectHeading}>No Interested Projects Yet</Text>
+              <Text style={[styles.emptyProjectText, { textAlign: "center", marginBottom: 16 }]}>
+                Only projects from NGOs you've said "interested" to appear here. Explore partner NGOs to discover and fund their initiatives!
+              </Text>
+              <TouchableOpacity
+                style={styles.exploreButton}
+                onPress={() => navigation?.navigate?.("Matches")}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.exploreButtonText}>Browse NGO Matches</Text>
+              </TouchableOpacity>
             </View>
           ) : projects.map((project) => {
             const goal = Number(project.fundingGoal ?? project.goalAmount) || 0;
@@ -302,7 +358,10 @@ export default function ImpactDashboardScreen() {
             const status = project.status || "Active";
             const completed = ["completed", "closed", "fully funded"].includes(String(status).toLowerCase());
             return (
-            <TouchableOpacity key={project.id} activeOpacity={0.8} style={styles.projectCard}>
+            <View
+              key={project.id}
+              style={styles.projectCard}
+            >
               <View style={styles.projectCardHeader}>
                 {project.imageUrl ? (
                   <Image source={{ uri: project.imageUrl }} style={styles.projectThumb} />
@@ -361,7 +420,21 @@ export default function ImpactDashboardScreen() {
                   {Math.round(ratio * 100)}% of R{goal.toLocaleString("en-ZA")}
                 </Text>
               </View>
-            </TouchableOpacity>
+              <View style={styles.projectActions}>
+                <TouchableOpacity
+                  style={styles.projectActionSecondary}
+                  onPress={() => navigation.navigate("ProjectProgress", { projectId: project.id })}
+                >
+                  <Text style={styles.projectActionSecondaryText}>View updates</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.projectActionPrimary}
+                  onPress={() => navigation.navigate("SponsorProposal", { projectId: project.id })}
+                >
+                  <Text style={styles.projectActionPrimaryText}>Propose support</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           );
           })}
 
@@ -553,7 +626,10 @@ const styles = StyleSheet.create({
   projectThumb: { width: 56, height: 56, borderRadius: 12, marginRight: 16 },
   projectImageFallback: { backgroundColor: COLORS.primarySoft },
   projectsEmpty: { backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 20, marginBottom: 16 },
-  emptyProjectText: { fontFamily: "Manrope_500Medium", fontSize: 14, color: COLORS.textSecondary, textAlign: "center", lineHeight: 21 },
+  emptyProjectHeading: { fontFamily: "Manrope_700Bold", fontSize: 16, color: COLORS.textPrimary, marginBottom: 6 },
+  emptyProjectText: { fontFamily: "Manrope_500Medium", fontSize: 13, color: COLORS.textSecondary, textAlign: "center", lineHeight: 20 },
+  exploreButton: { backgroundColor: COLORS.buttonDark, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, marginTop: 4 },
+  exploreButtonText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.white },
   projectMeta: { flex: 1, justifyContent: "center" },
   projectTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   projectTitle: { 
@@ -594,6 +670,11 @@ const styles = StyleSheet.create({
   },
   progressBarFill: { height: "100%", backgroundColor: COLORS.emerald },
   progressValueRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  projectActions: { flexDirection: "row", gap: 10, marginTop: 14 },
+  projectActionPrimary: { flex: 1, minHeight: 42, borderRadius: 12, backgroundColor: COLORS.buttonDark, alignItems: "center", justifyContent: "center" },
+  projectActionPrimaryText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.white },
+  projectActionSecondary: { flex: 1, minHeight: 42, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center" },
+  projectActionSecondaryText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.buttonDark },
   raisedText: { 
     fontFamily: "Manrope_700Bold",
     fontSize: 12, 
