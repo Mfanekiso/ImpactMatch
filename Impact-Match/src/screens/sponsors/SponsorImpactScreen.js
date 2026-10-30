@@ -11,9 +11,21 @@ import {
     Animated,
     Dimensions,
     ActivityIndicator,
+    Platform,
 } from "react-native";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import {
+  beneficiariesByMonth,
+  compact,
+  fundingByCause,
+  growthPercent,
+  projectBeneficiaries,
+  projectRaised,
+  selectPartnerProjects,
+  topStory,
+} from "../../utils/impactStats";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import {
   useFonts,
@@ -85,80 +97,58 @@ export default function ImpactDashboardScreen({ navigation }) {
   const barAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) {
+    let unsubscribeInterests = () => {};
+    let unsubscribeProjects = () => {};
+    let active = true;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      unsubscribeInterests();
+      unsubscribeProjects();
+      unsubscribeInterests = () => {};
+      unsubscribeProjects = () => {};
       setProjects([]);
-      setProjectsLoading(false);
-      return undefined;
-    }
-
-    let interestedNgoIds = new Set();
-    let rawProjects = [];
-
-    const filterAndSetProjects = () => {
-      // Only include projects belonging to NGOs the sponsor has said "interested" to
-      const filtered = rawProjects.filter((p) => {
-        const ngoId = p.ngoOwnerId || p.ownerId || p.ngoId;
-        return ngoId && interestedNgoIds.has(ngoId);
-      });
-      setProjects(filtered);
-      setProjectsLoading(false);
+      setInterests([]);
       setProjectsError(false);
-    };
 
-    // 1. Listen to this sponsor's expressed interests
-    const unsubInterests = onSnapshot(
-      query(collection(db, "interests"), where("sponsorId", "==", user.uid)),
-      (snapshot) => {
-        const set = new Set();
-        snapshot.docs.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.ngoId && data.interested === true) {
-            set.add(data.ngoId);
-          }
-        });
-        interestedNgoIds = set;
-        filterAndSetProjects();
-      },
-      (err) => {
-        console.warn("Could not load sponsor interests:", err?.message);
-      }
-    );
-
-    // 2. Listen to projects
-    const unsubProjects = onSnapshot(
-      query(
-        collection(db, "projects"),
-        where("status", "in", ["open", "active", "Active", "completed", "Completed"])
-      ),
-      (snapshot) => {
-        const rows = snapshot.docs.map((projectDoc) => ({ id: projectDoc.id, ...projectDoc.data() }));
-        rows.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-        rawProjects = rows;
-        filterAndSetProjects();
-      },
-      (error) => {
-        console.warn("Could not load sponsor impact projects:", error?.message);
+      if (!user) {
         setProjectsLoading(false);
-        setProjectsError(true);
+        return;
       }
-    );
+
+      setProjectsLoading(true);
+      unsubscribeInterests = onSnapshot(
+        query(collection(db, "interests"), where("sponsorId", "==", user.uid)),
+        (snapshot) => {
+          if (active) setInterests(snapshot.docs.map((docSnap) => docSnap.data()));
+        },
+        (error) => console.warn("Could not load sponsor interests:", error?.message)
+      );
+
+      unsubscribeProjects = onSnapshot(
+        query(collection(db, "projects"), where("status", "in", ["open", "active", "Active", "completed", "Completed"])),
+        (snapshot) => {
+          if (!active) return;
+          const rows = snapshot.docs.map((projectDoc) => ({ id: projectDoc.id, ...projectDoc.data() }));
+          rows.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+          setProjects(rows);
+          setProjectsLoading(false);
+          setProjectsError(false);
+        },
+        (error) => {
+          console.warn("Could not load sponsor impact projects:", error?.message);
+          if (!active) return;
+          setProjectsLoading(false);
+          setProjectsError(true);
+        }
+      );
+    });
 
     return () => {
-      unsubInterests();
-      unsubProjects();
+      active = false;
+      unsubscribeAuth();
+      unsubscribeInterests();
+      unsubscribeProjects();
     };
-  }, []);
-
-  // The sponsor's saved / interested NGOs decide which projects count as "your" impact
-  useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return undefined;
-    return onSnapshot(
-      query(collection(db, "interests"), where("sponsorId", "==", uid)),
-      (snapshot) => setInterests(snapshot.docs.map((d) => d.data())),
-      (error) => console.warn("Could not load interests:", error?.message)
-    );
   }, []);
 
   const scoped = React.useMemo(() => selectPartnerProjects(projects, interests), [projects, interests]);
@@ -171,7 +161,7 @@ export default function ImpactDashboardScreen({ navigation }) {
   const story = topStory(myProjects);
 
   const totalRaised = myProjects.reduce((sum, project) => sum + projectRaised(project), 0);
-  const totalPartners = new Set(myProjects.map((project) => project.ownerId || project.orgName || project.ngoName).filter(Boolean)).size;
+  const totalPartners = new Set(myProjects.map((project) => project.ngoOwnerId || project.ownerId || project.ngoId || project.orgName || project.ngoName).filter(Boolean)).size;
   const totalPeople = myProjects.reduce((sum, project) => sum + projectBeneficiaries(project), 0);
   const summaryStats = [
     { id: "1", label: "Raised", value: `R${compact(totalRaised)}`, bgColor: COLORS.primarySoft, color: COLORS.buttonDark },
@@ -185,12 +175,12 @@ export default function ImpactDashboardScreen({ navigation }) {
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 800,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 600,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
       Animated.timing(barAnim, {
         toValue: 1,
@@ -653,7 +643,6 @@ const styles = StyleSheet.create({
     fontSize: 12, 
     color: COLORS.textSecondary 
   },
-
   /* Impact Story Card */
   storyCard: {
     height: 200,

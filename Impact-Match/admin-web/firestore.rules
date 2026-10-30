@@ -86,6 +86,47 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Sponsor and NGO matching preferences are shared on one document per pair.
+    match /interests/{interestId} {
+      function isSponsor() {
+        return isSignedIn() && resource.data.sponsorId == request.auth.uid;
+      }
+      function isNgo() {
+        return isSignedIn() && resource.data.ngoId == request.auth.uid;
+      }
+      function validPair(data) {
+        return data.sponsorId is string && data.ngoId is string &&
+          interestId == data.sponsorId + "_" + data.ngoId;
+      }
+
+      allow read: if isAdmin() || isSponsor() || isNgo();
+      allow create: if isSignedIn() && validPair(request.resource.data) &&
+        request.resource.data.keys().hasOnly([
+          "sponsorId", "ngoId", "saved", "interested", "ngoInterested", "updatedAt"
+        ]) && (
+          (request.resource.data.sponsorId == request.auth.uid &&
+           request.resource.data.get("ngoInterested", false) == false) ||
+          (request.resource.data.ngoId == request.auth.uid &&
+           request.resource.data.get("ngoInterested", false) == true &&
+           request.resource.data.get("saved", false) == false &&
+           request.resource.data.get("interested", false) == false)
+        );
+      allow update: if isAdmin() || (
+        validPair(resource.data) && validPair(request.resource.data) &&
+        request.resource.data.sponsorId == resource.data.sponsorId &&
+        request.resource.data.ngoId == resource.data.ngoId &&
+        request.resource.data.keys().hasOnly([
+          "sponsorId", "ngoId", "saved", "interested", "ngoInterested", "updatedAt"
+        ]) && (
+          (resource.data.sponsorId == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(["saved", "interested", "updatedAt"])) ||
+          (resource.data.ngoId == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(["ngoInterested", "updatedAt"]))
+        )
+      );
+      allow delete: if isAdmin() || isSponsor();
+    }
+
     // Users: you can read your own document (needed for the role check),
     // admins can read and manage everyone.
     match /users/{uid} {

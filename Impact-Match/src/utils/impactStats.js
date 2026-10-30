@@ -26,7 +26,9 @@ export function selectPartnerProjects(projects = [], interests = []) {
     const partnerIds = new Set(
         interests.filter((i) => i && (i.saved || i.interested || i.ngoInterested)).map((i) => i.ngoId)
     );
-    const mine = projects.filter((p) => partnerIds.has(p.ownerId || p.ngoOwnerId));
+    const mine = projects.filter((p) =>
+        partnerIds.has(p.ownerId) || partnerIds.has(p.ngoOwnerId) || partnerIds.has(p.ngoId)
+    );
     return mine.length > 0
         ? { projects: mine, scope: "partners", partnerCount: partnerIds.size }
         : { projects, scope: "platform", partnerCount: 0 };

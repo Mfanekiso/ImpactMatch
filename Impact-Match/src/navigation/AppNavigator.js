@@ -84,7 +84,7 @@ const AnimatedTabIcon = ({ focused, routeName }) => {
             toValue: focused ? 1 : 0.85,
             friction: 5,
             tension: 80,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== "web",
         }).start();
     }, [focused]);
 

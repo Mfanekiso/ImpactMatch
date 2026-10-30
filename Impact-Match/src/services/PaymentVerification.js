@@ -17,44 +17,62 @@ export default function PaymentVerification({ route, navigation }) {
     const paymentState = route?.params?.payment;
     const sponsorshipId = route?.params?.id;
 
+    let timeout;
+    let returnTimer;
+    let finished = false;
+    const returnToApp = () => navigation.reset({
+      index: 0,
+      routes: [{ name: "SponsorTabs", params: { screen: "Impact" } }],
+    });
+    const finish = (nextStatus) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      setStatus(nextStatus);
+      returnTimer = setTimeout(returnToApp, 1400);
+    };
+
     if (paymentState === "cancelled") {
       setStatus("error");
-      return;
+      returnTimer = setTimeout(returnToApp, 1400);
+      return () => clearTimeout(returnTimer);
     }
 
-    if (paymentState === "complete" && sponsorshipId) {
-      setStatus("processing");
-
-      const iconInterval = setInterval(() => {
-        setIconIndex((prev) => (prev + 1) % loadingIcons.length);
-      }, 800);
-
-      const sponsorshipRef = doc(db, "sponsorships", sponsorshipId);
-      
-      const unsubscribe = onSnapshot(
-        sponsorshipRef,
-        (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (data.paymentStatus === "complete") {
-              setStatus("success");
-              clearInterval(iconInterval);
-            }
-          }
-        },
-        (error) => {
-          console.error("Firestore listener error:", error);
-          setStatus("error");
-          clearInterval(iconInterval);
-        }
-      );
-
-      return () => {
-        clearInterval(iconInterval);
-        unsubscribe();
-      };
+    if (paymentState !== "complete" || !sponsorshipId) {
+      setStatus("error");
+      returnTimer = setTimeout(returnToApp, 1400);
+      return () => clearTimeout(returnTimer);
     }
-  }, [route?.params]);
+
+    setStatus("processing");
+    const iconInterval = setInterval(() => {
+      setIconIndex((prev) => (prev + 1) % loadingIcons.length);
+    }, 800);
+    timeout = setTimeout(() => finish("pending"), 20000);
+
+    const unsubscribe = onSnapshot(
+      doc(db, "sponsorships", sponsorshipId),
+      (docSnap) => {
+        if (!docSnap.exists()) return;
+        const data = docSnap.data();
+        if (
+          String(data.paymentStatus || "").toLowerCase() === "complete" ||
+          ["active", "complete"].includes(String(data.status || "").toLowerCase())
+        ) finish("success");
+      },
+      (error) => {
+        console.error("Firestore listener error:", error);
+        finish("pending");
+      }
+    );
+
+    return () => {
+      clearInterval(iconInterval);
+      clearTimeout(timeout);
+      clearTimeout(returnTimer);
+      unsubscribe();
+    };
+  }, [route?.params, navigation]);
 
   if (status === "idle") return null;
 
@@ -101,6 +119,19 @@ export default function PaymentVerification({ route, navigation }) {
               onPress={() => navigation.navigate("SponsorTabs", { screen: "Home" })} 
             >
               <Text style={[styles.buttonText, { color: "#374151" }]}>Return Home</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {status === "pending" && (
+          <View style={styles.content}>
+            <View style={[styles.iconContainer, styles.errorIconBg]}>
+              <Ionicons name="time-outline" size={48} color="#D97706" />
+            </View>
+            <Text style={styles.title}>Still confirming</Text>
+            <Text style={styles.subtitle}>Returning to Impact Match. Your payment status will update when confirmation arrives.</Text>
+            <Pressable style={[styles.button, styles.successButton]} onPress={() => navigation.reset({ index: 0, routes: [{ name: "SponsorTabs", params: { screen: "Impact" } }] })}>
+              <Text style={styles.buttonText}>Return to Impact Match</Text>
             </Pressable>
           </View>
         )}

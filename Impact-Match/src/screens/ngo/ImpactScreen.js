@@ -14,6 +14,7 @@ import {
     TextInput,
     ActivityIndicator,
     Alert,
+    Platform,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import {
@@ -116,8 +117,8 @@ export default function NgoImpactScreen({ navigation }) {
         }
 
         const pulse = Animated.loop(Animated.sequence([
-            Animated.timing(deletePulse, { toValue: 1.14, duration: 500, useNativeDriver: true }),
-            Animated.timing(deletePulse, { toValue: 1, duration: 500, useNativeDriver: true }),
+            Animated.timing(deletePulse, { toValue: 1.14, duration: 500, useNativeDriver: Platform.OS !== "web" }),
+            Animated.timing(deletePulse, { toValue: 1, duration: 500, useNativeDriver: Platform.OS !== "web" }),
         ]));
         pulse.start();
         return () => pulse.stop();
@@ -132,12 +133,12 @@ export default function NgoImpactScreen({ navigation }) {
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 800,
-                useNativeDriver: true,
+                useNativeDriver: Platform.OS !== "web",
             }),
             Animated.timing(slideAnim, {
                 toValue: 0,
                 duration: 600,
-                useNativeDriver: true,
+                useNativeDriver: Platform.OS !== "web",
             }),
             Animated.timing(barAnim, {
                 toValue: 1,
