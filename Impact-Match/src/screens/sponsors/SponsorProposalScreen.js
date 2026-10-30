@@ -76,7 +76,7 @@ export default function SponsorProposalScreen({ route, navigation }) {
         amount: value,
         fundingType: type,
         message: message.trim(),
-        status: "proposed",
+        status: "complete",
         createdAt: serverTimestamp(),
       });
       navigation.navigate("SponsorPayment", {

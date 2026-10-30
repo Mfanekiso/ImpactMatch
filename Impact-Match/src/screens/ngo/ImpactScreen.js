@@ -37,6 +37,8 @@ import {
     serverTimestamp,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+import TransactionsSection from "../../components/TransactionsSection"; // NEW
+import useTransactions from "../../hooks/useTransactions"; // NEW
 
 const { width } = Dimensions.get("window");
 
@@ -77,10 +79,11 @@ export default function NgoImpactScreen({ navigation }) {
         Manrope_700Bold,
     });
 
+    // NEW: the payments this organisation has received (same data as the list below)
+    const { transactions } = useTransactions("ngo");
+
     const [projects, setProjects] = useState([]);
-    const [payments, setPayments] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [paymentsLoading, setPaymentsLoading] = useState(true);
 
     // Update modal state
     const [modalVisible, setModalVisible] = useState(false);
@@ -126,7 +129,6 @@ export default function NgoImpactScreen({ navigation }) {
 
     useEffect(() => {
         let unsubscribeProjects = [];
-        let unsubscribePayments = () => {};
         let active = true;
 
         Animated.parallel([
@@ -150,18 +152,14 @@ export default function NgoImpactScreen({ navigation }) {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             unsubscribeProjects.forEach((unsubscribe) => unsubscribe());
             unsubscribeProjects = [];
-            unsubscribePayments();
 
             if (!user) {
                 setProjects([]);
-                setPayments([]);
                 setLoading(false);
-                setPaymentsLoading(false);
                 return;
             }
 
             setLoading(true);
-            setPaymentsLoading(true);
             setProjects([]);
             const projectResults = new Map([
                 ["ngoOwnerId", new Map()],
@@ -213,36 +211,12 @@ export default function NgoImpactScreen({ navigation }) {
                 );
                 unsubscribeProjects.push(unsubscribe);
             });
-
-            // Listen to real-time payments received from sponsors for this NGO
-            const paymentsQuery = query(
-                collection(db, "payments"),
-                where("ngoId", "==", user.uid)
-            );
-            unsubscribePayments = onSnapshot(
-                paymentsQuery,
-                (snapshot) => {
-                    if (!active) return;
-                    const list = snapshot.docs.map((docSnap) => ({
-                        id: docSnap.id,
-                        ...docSnap.data(),
-                    }));
-                    list.sort((a, b) => (b.paidAt?.toMillis?.() || 0) - (a.paidAt?.toMillis?.() || 0));
-                    setPayments(list);
-                    setPaymentsLoading(false);
-                },
-                (error) => {
-                    console.warn("Could not load NGO payments:", error?.message);
-                    if (active) setPaymentsLoading(false);
-                }
-            );
         });
 
         return () => {
             active = false;
             unsubscribeAuth();
             unsubscribeProjects.forEach((unsubscribe) => unsubscribe());
-            unsubscribePayments();
         };
     }, [fadeAnim, slideAnim, barAnim]);
 
@@ -378,9 +352,7 @@ export default function NgoImpactScreen({ navigation }) {
     };
 
     const totalRaised = projects.reduce((total, project) => total + (Number(project.raisedAmount) || 0), 0);
-    const totalPaymentsReceived = payments
-        .filter((p) => p.status === "complete")
-        .reduce((sum, p) => sum + (Number(p.sponsorshipAmount) || 0), 0);
+    const totalPaymentsReceived = transactions.reduce((sum, t) => sum + t.amount, 0);
     const displayTotalRaised = Math.max(totalRaised, totalPaymentsReceived);
 
     const totalBeneficiaries = projects.reduce((total, project) => total + (Number(project.beneficiariesCount ?? project.beneficiaries) || 0), 0);
@@ -392,7 +364,7 @@ export default function NgoImpactScreen({ navigation }) {
         { id: "1", label: "Raised", value: `R${displayTotalRaised.toLocaleString("en-ZA")}`, bgColor: COLORS.primarySoft, color: COLORS.primary },
         { id: "2", label: "Active", value: String(totalActiveProjects), bgColor: COLORS.emeraldSoft, color: COLORS.emerald },
         { id: "3", label: "Total Proj.", value: String(projects.length), bgColor: COLORS.surface, color: COLORS.textPrimary, border: COLORS.border },
-        { id: "4", label: "Payments", value: String(payments.length), bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
+        { id: "4", label: "Payments", value: String(transactions.length), bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
     ];
 
     if (!fontsLoaded) return null;
@@ -562,60 +534,20 @@ export default function NgoImpactScreen({ navigation }) {
                         })
                     )}
 
-                    {/* SPONSORSHIP PAYMENTS RECEIVED SECTION */}
-                    <View style={[styles.sectionHeaderRow, { marginTop: 22 }]}>
-                        <Text style={styles.sectionHeaderTitle}>Sponsorship Payments</Text>
-                        <Text style={styles.sectionHeaderCount}>{payments.length} Received</Text>
+                    {/* CHANGED: real sponsorships from the "sponsorships" collection.
+                        This replaces the old "Sponsorship Payments" list. */}
+                    <View style={{ marginTop: 22 }}>
+                        <TransactionsSection
+                            role="ngo"
+                            palette={{
+                                accent: COLORS.primary,
+                                accentSoft: COLORS.primarySoft,
+                                border: COLORS.border,
+                                text: COLORS.textPrimary,
+                                muted: COLORS.textSecondary,
+                            }}
+                        />
                     </View>
-
-                    {paymentsLoading ? (
-                        <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 18 }} />
-                    ) : payments.length === 0 ? (
-                        <View style={styles.paymentEmptyCard}>
-                            <Ionicons name="card-outline" size={32} color={COLORS.textSecondary} style={{ marginBottom: 6 }} />
-                            <Text style={styles.paymentEmptyTitle}>No Payments Received Yet</Text>
-                            <Text style={styles.paymentEmptySub}>
-                                When sponsors contribute through the payment API, confirmed sponsorships will appear here in real time.
-                            </Text>
-                        </View>
-                    ) : (
-                        payments.map((pmt) => {
-                            const paidDate = pmt.paidAt?.toDate?.()
-                                ? pmt.paidAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
-                                : "Recently confirmed";
-                            return (
-                                <View key={pmt.id} style={styles.paymentCard}>
-                                    <View style={styles.paymentCardHeader}>
-                                        <View style={styles.paymentIconWrap}>
-                                            <Ionicons name="cash" size={20} color={COLORS.emerald} />
-                                        </View>
-                                        <View style={styles.paymentMeta}>
-                                            <Text style={styles.paymentProjectTitle} numberOfLines={1}>
-                                                {pmt.projectTitle || "Project sponsorship"}
-                                            </Text>
-                                            <Text style={styles.paymentSponsorName}>
-                                                From {pmt.sponsorName || "Sponsor"}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.paymentAmountCol}>
-                                            <Text style={styles.paymentAmount}>
-                                                +R{Number(pmt.sponsorshipAmount || 0).toLocaleString("en-ZA")}
-                                            </Text>
-                                            <View style={styles.paymentVerifiedBadge}>
-                                                <Text style={styles.paymentVerifiedText}>PayFast API</Text>
-                                            </View>
-                                        </View>
-                                    </View>
-                                    <View style={styles.paymentCardFooter}>
-                                        <Text style={styles.paymentDate}>{paidDate}</Text>
-                                        <Text style={styles.paymentRef}>
-                                            Ref: {pmt.transactionReference || pmt.paymentId || pmt.id}
-                                        </Text>
-                                    </View>
-                                </View>
-                            );
-                        })
-                    )}
                 </ScrollView>
 
                 {/* UPDATE EXISTING PROJECT MODAL (REPLACED EDIT WITH UPDATE) */}
@@ -870,24 +802,6 @@ const styles = StyleSheet.create({
     emptyContainer: { backgroundColor: COLORS.surface, padding: 32, borderRadius: 20, alignItems: "center", borderWidth: 1, borderColor: COLORS.border, marginTop: 12 },
     emptyTitle: { fontFamily: "Manrope_700Bold", fontSize: 18, color: COLORS.textPrimary },
     emptySubText: { fontFamily: "Manrope_500Medium", fontSize: 14, color: COLORS.textSecondary, textAlign: "center", marginTop: 8, lineHeight: 22 },
-
-    /* Received Payments Card & Section */
-    paymentCard: { backgroundColor: COLORS.surface, borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border, ...softShadow },
-    paymentCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-    paymentIconWrap: { width: 38, height: 38, borderRadius: 10, backgroundColor: COLORS.emeraldSoft, alignItems: "center", justifyContent: "center" },
-    paymentMeta: { flex: 1 },
-    paymentProjectTitle: { fontFamily: "Manrope_700Bold", fontSize: 14, color: COLORS.textPrimary },
-    paymentSponsorName: { fontFamily: "Manrope_500Medium", fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-    paymentAmountCol: { alignItems: "flex-end" },
-    paymentAmount: { fontFamily: "Manrope_700Bold", fontSize: 15, color: COLORS.emerald },
-    paymentVerifiedBadge: { backgroundColor: COLORS.primarySoft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginTop: 3 },
-    paymentVerifiedText: { fontFamily: "Manrope_700Bold", fontSize: 9, color: COLORS.primary },
-    paymentCardFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#EFF6FF" },
-    paymentDate: { fontFamily: "Manrope_500Medium", fontSize: 11, color: COLORS.textSecondary },
-    paymentRef: { fontFamily: "Manrope_500Medium", fontSize: 11, color: COLORS.textSecondary, opacity: 0.8 },
-    paymentEmptyCard: { backgroundColor: COLORS.surface, padding: 24, borderRadius: 16, alignItems: "center", borderWidth: 1, borderColor: COLORS.border, marginBottom: 12 },
-    paymentEmptyTitle: { fontFamily: "Manrope_700Bold", fontSize: 15, color: COLORS.textPrimary },
-    paymentEmptySub: { fontFamily: "Manrope_500Medium", fontSize: 12, color: COLORS.textSecondary, textAlign: "center", marginTop: 4, lineHeight: 18 },
 
     /* Update Modal */
     modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.45)", justifyContent: "center", padding: 16 },

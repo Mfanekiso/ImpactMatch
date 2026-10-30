@@ -27,6 +27,7 @@ import {
   topStory,
 } from "../../utils/impactStats";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import TransactionsSection from "../../components/TransactionsSection";
 import {
   useFonts,
   Manrope_400Regular,
@@ -414,6 +415,19 @@ export default function ImpactDashboardScreen({ navigation }) {
               </View>
             </>
           ) : null}
+
+          <View style={{ marginTop: 22 }}>
+            <TransactionsSection
+              role="sponsor"
+              palette={{
+                accent: COLORS.buttonDark,
+                accentSoft: COLORS.buttonDarkSoft,
+                border: COLORS.border,
+                text: COLORS.textPrimary,
+                muted: COLORS.textSecondary,
+              }}
+            />
+          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
