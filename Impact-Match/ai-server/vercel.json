@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/suggest-causes.js": { "maxDuration": 60 },
+    "api/transcribe-story.js": { "maxDuration": 60 },
+    "api/draft-outreach.js": { "maxDuration": 60 },
+    "api/review-profile.js": { "maxDuration": 60 }
+  }
+}
