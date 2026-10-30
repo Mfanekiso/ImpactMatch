@@ -1,40 +1,159 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
     View,
     Text,
     ScrollView,
     TouchableOpacity,
     StyleSheet,
-    SafeAreaView,
     StatusBar,
     Image,
+    ActivityIndicator,
+    Alert,
+    Platform,
+    Modal,
+    TextInput,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import * as ImagePicker from "expo-image-picker";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 
+// Firebase imports
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import {
+    EmailAuthProvider,
+    reauthenticateWithCredential,
+    signOut,
+    updateEmail,
+    updatePassword,
+} from "firebase/auth";
+import { auth, db } from "../../../Backend/firebaseConfig";
+import { removePushTokenForUser } from "../../utils/pushNotifications";
+import { cacheProfile } from "../../utils/profileCache";
+import { withCoordinates } from "../../utils/geocode";
+
+// ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
 const COLORS = {
-    background: "#F9FAFB",
-    surface: "#FFFFFF",
-    primary: "#2563EB", // Blue accent
-    textPrimary: "#111827",
-    textSecondary: "#6B7280",
-    border: "#E5E7EB",
+    background: "#F8F6EE",       // Cream base
+    surface: "#FFFFFF",          // Clean white
+    primary: "#D9C982",          // Soft Luxury Gold
+    primarySoft: "rgba(217, 201, 130, 0.2)",
+    emerald: "#059669",          // Vibrant Emerald for accents/success
+    emeraldSoft: "rgba(5, 150, 105, 0.08)",
+    textPrimary: "#433327",      // Warm Bronze
+    textSecondary: "#8C7A6B",    // Muted taupe
+    border: "#E8DFD5",
     white: "#FFFFFF",
-    warning: "#F59E0B", // Orange for progress bar
-    warningLight: "rgba(245, 158, 11, 0.1)",
-    danger: "#EF4444",
+    danger: "#DC2626",           // Richer red for sign out
+    dangerSoft: "rgba(220, 38, 38, 0.1)",
 };
 
-export default function ProfileScreen({ navigation, route }) {
-    // Extract data passed from NGOSetupScreen
-    const { 
-        organisationName, 
-        location, 
-        fundingRequired, 
-        mission, 
-        targetCommunity 
-    } = route.params || {};
+const softShadow = {
+    shadowColor: COLORS.textPrimary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+};
 
-    // Generate initials from organisation name (e.g., "Education For All" -> "EFA")
+export default function NGOProfileScreen({ navigation }) {
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
+    const [profile, setProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
+    const [editVisible, setEditVisible] = useState(false);
+    const [passwordVisible, setPasswordVisible] = useState(false);
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
+    const [editValues, setEditValues] = useState({});
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+
+    const uid = auth.currentUser?.uid;
+
+    const fetchProfile = async () => {
+        if (!uid) return;
+        try {
+            const snap = await getDoc(doc(db, "users", uid));
+            if (snap.exists()) {
+                const data = snap.data();
+                setProfile(data);
+                setEditValues({
+                    full_name: data.full_name || "",
+                    organisationName: data.organisationName || "",
+                    email: data.email || auth.currentUser?.email || "",
+                    location: data.location || "",
+                    mission: data.mission || "",
+                    fundingRequired: data.fundingRequired == null ? "" : String(data.fundingRequired),
+                    targetCommunity: data.targetCommunity || "",
+                });
+            }
+        } catch (error) {
+            Alert.alert("Error Loading Profile", error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchProfile();
+    }, [uid]);
+
+    const handlePickImage = async () => {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+            Alert.alert("Permission Needed", "Allow photo access to upload a profile image.");
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+        });
+
+        if (result.canceled) return;
+
+        try {
+            setUploading(true);
+            const uri = result.assets[0].uri;
+
+            const response = await fetch(uri);
+            const blob = await response.blob();
+
+            const storage = getStorage();
+            const imageRef = ref(storage, `profileImages/${uid}`);
+            await uploadBytes(imageRef, blob);
+
+            const downloadUrl = await getDownloadURL(imageRef);
+
+            await updateDoc(doc(db, "users", uid), {
+                profileImageUrl: downloadUrl,
+            });
+
+            setProfile((prev) => ({ ...prev, profileImageUrl: downloadUrl }));
+        } catch (error) {
+            Alert.alert("Upload Failed", error.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const getInitials = (name) => {
         if (!name) return "NGO";
         return name
@@ -45,346 +164,665 @@ export default function ProfileScreen({ navigation, route }) {
             .substring(0, 3);
     };
 
-    // Dynamic menu items based on available data
+    const handleSignOut = async () => {
+        try {
+            await removePushTokenForUser(auth.currentUser?.uid);
+            await signOut(auth);
+            navigation.replace("Login");
+        } catch (error) {
+            Alert.alert("Sign Out Failed", error.message);
+        }
+    };
+
+    const handleBack = () => {
+        if (navigation.canGoBack()) {
+            navigation.goBack();
+        } else {
+            navigation.navigate("MainTabs", { screen: "Home" });
+        }
+    };
+
+    const handleSaveProfile = async () => {
+        const user = auth.currentUser;
+        if (!user) {
+            Alert.alert("Sign in required", "Please sign in again to update your profile.");
+            return;
+        }
+        const updated = {
+            full_name: (editValues.full_name || "").trim(),
+            organisationName: (editValues.organisationName || "").trim(),
+            email: (editValues.email || "").trim(),
+            location: (editValues.location || "").trim(),
+            mission: (editValues.mission || "").trim(),
+            fundingRequired: (editValues.fundingRequired || "").trim(),
+            targetCommunity: (editValues.targetCommunity || "").trim(),
+        };
+        if (!updated.organisationName || !updated.email) {
+            Alert.alert("Missing information", "Organisation name and email are required.");
+            return;
+        }
+        if (updated.email !== (user.email || "") && !currentPassword) {
+            Alert.alert("Current password required", "Enter your current password to change your email address.");
+            return;
+        }
+
+        setSavingProfile(true);
+        try {
+            if (updated.email !== (user.email || "")) {
+                const credential = EmailAuthProvider.credential(user.email, currentPassword);
+                await reauthenticateWithCredential(user, credential);
+                await updateEmail(user, updated.email);
+            }
+            const located = await withCoordinates(updated);
+            await updateDoc(doc(db, "users", user.uid), located);
+            const nextProfile = { ...profile, ...located };
+            setProfile(nextProfile);
+            await cacheProfile(user.uid, nextProfile);
+            setEditVisible(false);
+            setCurrentPassword("");
+            Alert.alert("Profile updated", "Your profile changes have been saved.");
+        } catch (error) {
+            console.error("NGO profile update failed:", error);
+            const message = error.code === "auth/requires-recent-login"
+                ? "Please sign out and sign in again before changing your email."
+                : error.message || "Please try again.";
+            Alert.alert("Could not update profile", message);
+        } finally {
+            setSavingProfile(false);
+        }
+    };
+
+    const handleChangePassword = async () => {
+        const user = auth.currentUser;
+        if (!user?.email) {
+            Alert.alert("Unable to change password", "This account does not have an email and password sign-in.");
+            return;
+        }
+        if (!currentPassword || newPassword.length < 6) {
+            Alert.alert("Check your password", "Enter your current password and a new password with at least 6 characters.");
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Alert.alert("Passwords do not match", "Please enter the same new password in both fields.");
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+            await reauthenticateWithCredential(user, credential);
+            await updatePassword(user, newPassword);
+            setPasswordVisible(false);
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+            Alert.alert("Password changed", "Your password has been updated.");
+        } catch (error) {
+            console.error("Password update failed:", error);
+            const message = error.code === "auth/wrong-password" || error.code === "auth/invalid-credential"
+                ? "Your current password is incorrect."
+                : error.message || "Please try again.";
+            Alert.alert("Could not change password", message);
+        } finally {
+            setChangingPassword(false);
+        }
+    };
+
+    const openEditProfile = () => {
+        setCurrentPassword("");
+        setEditVisible(true);
+    };
+
+    if (!fontsLoaded) {
+        return null;
+    }
+
+    if (loading) {
+        return (
+            <SafeAreaView style={[styles.safeArea, styles.centered]}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+            </SafeAreaView>
+        );
+    }
+
+    const {
+        full_name,
+        email,
+        organisationName,
+        location,
+        mission,
+        fundingRequired,
+        targetCommunity,
+        profileImageUrl,
+    } = profile || {};
+
     const profileMenuItems = [
-        {
-            id: "1",
-            title: "Organisation Details",
-            subtitle: `NGO · Est. ${organisationName ? "Not provided" : "Not provided"}`,
-            icon: "business-outline",
-        },
-        {
-            id: "2",
-            title: "Mission & Causes",
-            subtitle: mission || "Not provided",
-            icon: "heart-outline",
-        },
-        {
-            id: "3",
-            title: "Funding Requirements",
-            subtitle: fundingRequired ? `R${fundingRequired}` : "Not provided",
-            icon: "cash-outline",
-        },
-        {
-            id: "4",
-            title: "Communities Served",
-            subtitle: targetCommunity || "Not provided",
-            icon: "people-outline",
-        },
-        {
-            id: "5",
-            title: "Projects",
-            subtitle: "0 active projects",
-            icon: "folder-open-outline",
-        },
-        {
-            id: "6",
-            title: "Matching Preferences",
-            subtitle: "Sponsors aligned with your causes",
-            icon: "options-outline",
-        },
-        {
-            id: "7",
-            title: "Settings",
-            subtitle: "Notifications, privacy, security",
-            icon: "settings-outline",
-        },
+        { id: "1", title: "Organisation Details", subtitle: organisationName || "Not provided", icon: "business" },
+        { id: "2", title: "Mission & Causes", subtitle: mission || "Not provided", icon: "heart" },
+        { id: "3", title: "Funding Requirements", subtitle: fundingRequired ? `R${fundingRequired}` : "Not provided", icon: "wallet" },
+        { id: "4", title: "Communities Served", subtitle: targetCommunity || "Not provided", icon: "people" },
+        { id: "5", title: "Contact", subtitle: email || "Not provided", icon: "mail" },
     ];
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Cover Image */}
-                <Image
-                    source={{
-                        uri: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&q=80&w=1000",
-                    }}
-                    style={styles.coverImage}
-                    resizeMode="cover"
-                />
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-                {/* Profile Header */}
-                <View style={styles.profileHeader}>
-                    <View style={styles.avatarContainer}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>
-                                {getInitials(organisationName)}
-                            </Text>
-                        </View>
-                    </View>
-
-                    <TouchableOpacity style={styles.editButton}>
-                        <Text style={styles.editButtonText}>Edit Profile</Text>
+                <View style={styles.imageContainer}>
+                    <Image
+                        source={{ uri: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&q=80&w=1000" }}
+                        style={styles.coverImage}
+                        resizeMode="cover"
+                    />
+                    <View style={styles.coverOverlay} />
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back to home"
+                        onPress={handleBack}
+                    >
+                        <Ionicons name="arrow-back" size={21} color={COLORS.white} />
+                        <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Name & Badges */}
+                <View style={styles.profileHeader}>
+                    <TouchableOpacity
+                        style={styles.avatarContainer}
+                        activeOpacity={0.8}
+                        onPress={handlePickImage}
+                        disabled={uploading}
+                    >
+                        {profileImageUrl ? (
+                            <Image source={{ uri: profileImageUrl }} style={styles.avatarImage} />
+                        ) : (
+                            <View style={styles.avatar}>
+                                <Text style={styles.avatarText}>{getInitials(organisationName)}</Text>
+                            </View>
+                        )}
+
+                        <View style={styles.cameraBadge}>
+                            {uploading ? (
+                                <ActivityIndicator size="small" color={COLORS.white} />
+                            ) : (
+                                <Ionicons name="camera" size={14} color={COLORS.white} />
+                            )}
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.editButton} onPress={handlePickImage}>
+                        <Text style={styles.editButtonText}>{profileImageUrl ? "Change Photo" : "Add Photo"}</Text>
+                    </TouchableOpacity>
+                </View>
+
                 <View style={styles.nameSection}>
                     <View style={styles.nameRow}>
-                        <Text style={styles.organisationName}>
-                            {organisationName || "Your Organisation"}
-                        </Text>
+                        <Text style={styles.organisationName}>{organisationName || full_name || "Your Organisation"}</Text>
                         <View style={styles.verifiedBadge}>
-                            <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} />
-                            <Text style={styles.verifiedText}>Verified</Text>
+                            <Ionicons name="checkmark-circle" size={14} color={COLORS.emerald} />
+                            <Text style={styles.verifiedText}>NGO</Text>
                         </View>
                     </View>
                     <Text style={styles.locationText}>
-                        <Ionicons name="globe-outline" size={14} color={COLORS.textSecondary} />{" "}
-                        {location || "Location not provided"} · NGO
+                        <Ionicons name="location-outline" size={14} color={COLORS.primary} />{" "}
+                        {location || "Location not provided"}
                     </Text>
                 </View>
 
-                {/* Profile Completion Card */}
-                <View style={styles.completionCard}>
-                    <View style={styles.completionHeader}>
-                        <Text style={styles.completionTitle}>Profile Completion</Text>
-                        <Text style={styles.completionPercentage}>72%</Text>
-                    </View>
-                    <View style={styles.progressBarBackground}>
-                        <View style={[styles.progressBarFill, { width: "72%" }]} />
-                    </View>
-                    <Text style={styles.completionSubtitle}>
-                        Add impact evidence to reach 100% and improve sponsor visibility.
-                    </Text>
+                <View style={styles.profileActions}>
+                    <TouchableOpacity style={styles.profileActionButton} activeOpacity={0.85} onPress={openEditProfile}>
+                        <Ionicons name="create-outline" size={18} color={COLORS.white} />
+                        <Text style={styles.profileActionPrimaryText}>Edit profile details</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.passwordActionButton} activeOpacity={0.85} onPress={() => {
+                        setCurrentPassword("");
+                        setNewPassword("");
+                        setConfirmPassword("");
+                        setPasswordVisible(true);
+                    }}>
+                        <Ionicons name="lock-closed-outline" size={18} color={COLORS.textPrimary} />
+                        <Text style={styles.profileActionSecondaryText}>Change password</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.passwordActionButton}
+                        activeOpacity={0.85}
+                        onPress={() => navigation.navigate("NGOVerification")}
+                    >
+                        <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.textPrimary} />
+                        <Text style={styles.profileActionSecondaryText}>Verify organisation</Text>
+                    </TouchableOpacity>
                 </View>
 
-                {/* Menu List */}
                 <View style={styles.menuContainer}>
                     {profileMenuItems.map((item, index) => (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={[
-                                styles.menuItem,
-                                index === profileMenuItems.length - 1 && styles.menuItemLast,
-                            ]}
-                            activeOpacity={0.7}
-                            // onPress={() => navigation.navigate(item.route)}
-                        >
+                        <View key={item.id} style={[styles.menuItem, index === profileMenuItems.length - 1 && styles.menuItemLast]}>
+                            <View style={styles.menuIconWrapper}>
+                                <Ionicons name={item.icon} size={20} color={COLORS.primary} />
+                            </View>
                             <View style={styles.menuContent}>
                                 <Text style={styles.menuTitle}>{item.title}</Text>
                                 <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
                             </View>
-                            <Ionicons
-                                name="chevron-forward"
-                                size={20}
-                                color={COLORS.textSecondary}
-                            />
-                        </TouchableOpacity>
+                            <Ionicons name="chevron-forward" size={18} color={COLORS.border} />
+                        </View>
                     ))}
                 </View>
 
-                {/* Sign Out Button */}
-                <TouchableOpacity
-                    style={styles.signOutButton}
-                    activeOpacity={0.8}
-                    onPress={() => navigation.replace("Login")}
-                >
+                <TouchableOpacity style={styles.signOutButton} activeOpacity={0.85} onPress={handleSignOut}>
+                    <View style={styles.signOutIconWrapper}>
+                        <Ionicons name="log-out-outline" size={20} color={COLORS.danger} />
+                    </View>
                     <Text style={styles.signOutText}>Sign Out</Text>
                 </TouchableOpacity>
             </ScrollView>
+
+            <Modal visible={editVisible} transparent animationType="slide" onRequestClose={() => !savingProfile && setEditVisible(false)}>
+                <View style={styles.formOverlay}>
+                    <View style={styles.formDialog}>
+                        <Text style={styles.formTitle}>Edit profile details</Text>
+                        <Text style={styles.formSubtitle}>Changes are saved to your profile and used throughout the app.</Text>
+                        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                            {[
+                                ["full_name", "Contact person", "Your full name"],
+                                ["organisationName", "Organisation name", "Organisation name"],
+                                ["email", "Email address", "name@example.com"],
+                                ["location", "Location", "City, province"],
+                                ["mission", "Mission & causes", "What your organisation does"],
+                                ["fundingRequired", "Funding required (ZAR)", "e.g. 250000"],
+                                ["targetCommunity", "Communities served", "Community or cause"],
+                            ].map(([key, label, placeholder]) => (
+                                <View key={key}>
+                                    <Text style={styles.inputLabel}>{label}</Text>
+                                    <TextInput
+                                        style={[styles.formInput, key === "mission" && styles.formMultiline]}
+                                        value={editValues[key] || ""}
+                                        onChangeText={(value) => setEditValues((previous) => ({ ...previous, [key]: value }))}
+                                        placeholder={placeholder}
+                                        placeholderTextColor={COLORS.textSecondary}
+                                        autoCapitalize={key === "email" ? "none" : "sentences"}
+                                        keyboardType={key === "email" ? "email-address" : key === "fundingRequired" ? "decimal-pad" : "default"}
+                                        multiline={key === "mission"}
+                                    />
+                                </View>
+                            ))}
+                            {editValues.email?.trim() !== (auth.currentUser?.email || "") && (
+                                <View>
+                                    <Text style={styles.inputLabel}>Current password (to change email)</Text>
+                                    <TextInput
+                                        style={styles.formInput}
+                                        value={currentPassword}
+                                        onChangeText={setCurrentPassword}
+                                        placeholder="Enter your current password"
+                                        placeholderTextColor={COLORS.textSecondary}
+                                        secureTextEntry
+                                        autoCapitalize="none"
+                                    />
+                                </View>
+                            )}
+                        </ScrollView>
+                        <View style={styles.formActions}>
+                            <TouchableOpacity style={styles.formCancelButton} disabled={savingProfile} onPress={() => setEditVisible(false)}>
+                                <Text style={styles.formCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.formSaveButton} disabled={savingProfile} onPress={handleSaveProfile}>
+                                {savingProfile ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={styles.formSaveText}>Save changes</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal visible={passwordVisible} transparent animationType="fade" onRequestClose={() => !changingPassword && setPasswordVisible(false)}>
+                <View style={styles.formOverlay}>
+                    <View style={styles.formDialog}>
+                        <Text style={styles.formTitle}>Change password</Text>
+                        <Text style={styles.formSubtitle}>Confirm your current password to secure this change.</Text>
+                        <Text style={styles.inputLabel}>Current password</Text>
+                        <TextInput style={styles.formInput} value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry placeholder="Current password" placeholderTextColor={COLORS.textSecondary} autoCapitalize="none" />
+                        <Text style={styles.inputLabel}>New password</Text>
+                        <TextInput style={styles.formInput} value={newPassword} onChangeText={setNewPassword} secureTextEntry placeholder="At least 6 characters" placeholderTextColor={COLORS.textSecondary} autoCapitalize="none" />
+                        <Text style={styles.inputLabel}>Confirm new password</Text>
+                        <TextInput style={styles.formInput} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry placeholder="Enter the new password again" placeholderTextColor={COLORS.textSecondary} autoCapitalize="none" />
+                        <View style={styles.formActions}>
+                            <TouchableOpacity style={styles.formCancelButton} disabled={changingPassword} onPress={() => setPasswordVisible(false)}>
+                                <Text style={styles.formCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.formSaveButton} disabled={changingPassword} onPress={handleChangePassword}>
+                                {changingPassword ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={styles.formSaveText}>Update password</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: COLORS.background,
+    safeArea: { 
+        flex: 1, 
+        backgroundColor: COLORS.background 
     },
-    scrollContent: {
-        paddingBottom: 40,
+    centered: { 
+        justifyContent: "center", 
+        alignItems: "center" 
     },
-
-    /* Cover Image */
-    coverImage: {
-        width: "100%",
-        height: 160,
+    scrollContent: { 
+        paddingBottom: 120 
     },
-
-    /* Profile Header */
-    profileHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "flex-end",
-        paddingHorizontal: 20,
-        marginTop: -40, // Pull up to overlap the cover image
-    },
-    avatarContainer: {
-        width: 86,
-        height: 86,
-        borderRadius: 43,
-        backgroundColor: COLORS.white,
-        alignItems: "center",
-        justifyContent: "center",
-        elevation: 4,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    avatar: {
-        width: 76,
-        height: 76,
-        borderRadius: 38,
-        backgroundColor: "#1E3A8A", // Dark blue matching the image
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    avatarText: {
-        color: COLORS.white,
-        fontSize: 24,
-        fontWeight: "800",
-    },
-    editButton: {
-        backgroundColor: COLORS.white,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        elevation: 2,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-    },
-    editButtonText: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: COLORS.textPrimary,
-    },
-
-    /* Name & Badges */
-    nameSection: {
-        paddingHorizontal: 20,
+    profileActions: {
+        gap: 10,
+        marginHorizontal: 24,
         marginTop: 16,
     },
-    nameRow: {
+    profileActionButton: {
         flexDirection: "row",
         alignItems: "center",
-        flexWrap: "wrap",
+        justifyContent: "center",
         gap: 8,
-        marginBottom: 6,
+        paddingVertical: 14,
+        borderRadius: 18,
+        backgroundColor: COLORS.textPrimary,
     },
-    organisationName: {
-        fontSize: 22,
-        fontWeight: "700",
-        color: COLORS.textPrimary,
-    },
-    verifiedBadge: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "rgba(37, 99, 235, 0.08)",
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-        gap: 4,
-    },
-    verifiedText: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: COLORS.primary,
-    },
-    locationText: {
+    profileActionPrimaryText: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 14,
-        color: COLORS.textSecondary,
+        color: COLORS.white,
     },
-
-    /* Profile Completion Card */
-    completionCard: {
-        backgroundColor: COLORS.white,
-        marginHorizontal: 20,
-        marginTop: 24,
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1.5,
-        borderColor: COLORS.warning,
-    },
-    completionHeader: {
+    passwordActionButton: {
         flexDirection: "row",
-        justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 12,
-    },
-    completionTitle: {
-        fontSize: 15,
-        fontWeight: "700",
-        color: COLORS.textPrimary,
-    },
-    completionPercentage: {
-        fontSize: 15,
-        fontWeight: "700",
-        color: COLORS.warning,
-    },
-    progressBarBackground: {
-        height: 8,
-        backgroundColor: "#F3F4F6",
-        borderRadius: 4,
-        marginBottom: 12,
-        overflow: "hidden",
-    },
-    progressBarFill: {
-        height: "100%",
-        backgroundColor: COLORS.warning,
-        borderRadius: 4,
-    },
-    completionSubtitle: {
-        fontSize: 13,
-        color: COLORS.textSecondary,
-        lineHeight: 18,
-    },
-
-    /* Menu List */
-    menuContainer: {
-        backgroundColor: COLORS.white,
-        marginHorizontal: 20,
-        marginTop: 24,
-        borderRadius: 16,
+        justifyContent: "center",
+        gap: 8,
+        paddingVertical: 13,
+        borderRadius: 18,
+        backgroundColor: COLORS.surface,
         borderWidth: 1,
         borderColor: COLORS.border,
-        overflow: "hidden",
     },
-    menuItem: {
+    profileActionSecondaryText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 14,
+        color: COLORS.textPrimary,
+    },
+    imageContainer: {
+        position: 'relative',
+    },
+    coverImage: { 
+        width: "100%", 
+        height: 180,
+    },
+    coverOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(67, 51, 39, 0.1)', 
+    },
+    backButton: {
+        position: "absolute",
+        top: 16,
+        left: 20,
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "space-between",
-        padding: 18,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
+        gap: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 22,
+        backgroundColor: "rgba(67, 51, 39, 0.72)",
     },
-    menuItemLast: {
-        borderBottomWidth: 0,
+    backButtonText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 13,
+        color: COLORS.white,
     },
-    menuContent: {
-        flex: 1,
-        marginRight: 10,
+    profileHeader: { 
+        flexDirection: "row", 
+        justifyContent: "space-between", 
+        alignItems: "flex-end", 
+        paddingHorizontal: 24, 
+        marginTop: -45 
     },
-    menuTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.textPrimary,
+    avatarContainer: {
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        backgroundColor: COLORS.surface,
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 4,
+        ...softShadow,
+    },
+    avatarImage: { 
+        width: 82, 
+        height: 82, 
+        borderRadius: 41 
+    },
+    avatar: { 
+        width: 82, 
+        height: 82, 
+        borderRadius: 41, 
+        backgroundColor: COLORS.primarySoft, 
+        alignItems: "center", 
+        justifyContent: "center" 
+    },
+    avatarText: { 
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.textPrimary, 
+        fontSize: 24, 
+    },
+    cameraBadge: { 
+        position: "absolute", 
+        bottom: 0, 
+        right: 0, 
+        width: 28, 
+        height: 28, 
+        borderRadius: 14, 
+        backgroundColor: COLORS.emerald, 
+        alignItems: "center", 
+        justifyContent: "center", 
+        borderWidth: 2, 
+        borderColor: COLORS.surface 
+    },
+    editButton: { 
+        backgroundColor: COLORS.surface, 
+        paddingHorizontal: 20, 
+        paddingVertical: 10, 
+        borderRadius: 24, 
+        borderWidth: 1, 
+        borderColor: COLORS.border,
+        ...softShadow,
         marginBottom: 4,
     },
-    menuSubtitle: {
+    editButtonText: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 13, 
+        color: COLORS.textPrimary,
+        letterSpacing: 0.3,
+    },
+    nameSection: { 
+        paddingHorizontal: 24, 
+        marginTop: 20,
+        marginBottom: 8,
+    },
+    nameRow: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        flexWrap: "wrap", 
+        gap: 10, 
+        marginBottom: 6 
+    },
+    organisationName: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 26, 
+        color: COLORS.textPrimary,
+        letterSpacing: -0.5,
+    },
+    verifiedBadge: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        backgroundColor: COLORS.emeraldSoft, 
+        paddingHorizontal: 10, 
+        paddingVertical: 4, 
+        borderRadius: 12, 
+        gap: 4 
+    },
+    verifiedText: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 12, 
+        color: COLORS.emerald,
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+    },
+    locationText: { 
+        fontFamily: "Manrope_500Medium",
+        fontSize: 15, 
+        color: COLORS.textSecondary,
+    },
+    menuContainer: { 
+        backgroundColor: COLORS.surface, 
+        marginHorizontal: 24, 
+        marginTop: 24, 
+        borderRadius: 24, 
+        borderWidth: 1, 
+        borderColor: COLORS.border, 
+        overflow: "hidden",
+        ...softShadow,
+    },
+    menuItem: { 
+        flexDirection: "row", 
+        alignItems: "center", 
+        padding: 20, 
+        borderBottomWidth: 1, 
+        borderBottomColor: COLORS.border 
+    },
+    menuItemLast: { 
+        borderBottomWidth: 0 
+    },
+    menuIconWrapper: { 
+        width: 44, 
+        height: 44, 
+        borderRadius: 14, 
+        backgroundColor: COLORS.primarySoft, 
+        alignItems: "center", 
+        justifyContent: "center", 
+        marginRight: 16 
+    },
+    menuContent: { 
+        flex: 1 
+    },
+    menuTitle: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 15, 
+        color: COLORS.textPrimary, 
+        marginBottom: 4 
+    },
+    menuSubtitle: { 
+        fontFamily: "Manrope_400Regular",
+        fontSize: 14, 
+        color: COLORS.textSecondary,
+        lineHeight: 20,
+    },
+    signOutButton: { 
+        flexDirection: "row",
+        alignItems: "center", 
+        justifyContent: "center",
+        backgroundColor: COLORS.dangerSoft,
+        marginHorizontal: 24,
+        marginTop: 32, 
+        paddingVertical: 16,
+        borderRadius: 20,
+    },
+    signOutIconWrapper: {
+        marginRight: 8,
+    },
+    signOutText: { 
+        fontFamily: "Manrope_700Bold",
+        fontSize: 16, 
+        color: COLORS.danger,
+        letterSpacing: 0.3,
+    },
+    formOverlay: {
+        flex: 1,
+        justifyContent: "center",
+        backgroundColor: "rgba(67, 51, 39, 0.5)",
+        padding: 18,
+    },
+    formDialog: {
+        maxHeight: "90%",
+        backgroundColor: COLORS.surface,
+        borderRadius: 24,
+        padding: 22,
+        ...softShadow,
+    },
+    formTitle: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 20,
+        color: COLORS.textPrimary,
+    },
+    formSubtitle: {
+        fontFamily: "Manrope_500Medium",
+        fontSize: 13,
+        color: COLORS.textSecondary,
+        lineHeight: 19,
+        marginTop: 5,
+        marginBottom: 12,
+    },
+    inputLabel: {
+        fontFamily: "Manrope_600SemiBold",
+        fontSize: 13,
+        color: COLORS.textPrimary,
+        marginTop: 10,
+        marginBottom: 5,
+    },
+    formInput: {
+        fontFamily: "Manrope_500Medium",
+        fontSize: 14,
+        color: COLORS.textPrimary,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: 12,
+        backgroundColor: COLORS.background,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+    },
+    formMultiline: {
+        minHeight: 78,
+        textAlignVertical: "top",
+    },
+    formActions: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 18,
+    },
+    formCancelButton: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 13,
+        borderRadius: 22,
+        backgroundColor: COLORS.background,
+    },
+    formCancelText: {
+        fontFamily: "Manrope_700Bold",
         fontSize: 13,
         color: COLORS.textSecondary,
     },
-
-    /* Sign Out */
-    signOutButton: {
-        marginTop: 32,
+    formSaveButton: {
+        flex: 1,
         alignItems: "center",
-        paddingVertical: 12,
+        justifyContent: "center",
+        paddingVertical: 13,
+        borderRadius: 22,
+        backgroundColor: COLORS.textPrimary,
     },
-    signOutText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.danger,
+    formSaveText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 13,
+        color: COLORS.white,
     },
 });

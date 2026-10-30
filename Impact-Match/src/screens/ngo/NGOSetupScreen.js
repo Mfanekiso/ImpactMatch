@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
     View,
     Text,
@@ -7,14 +8,20 @@ import {
     StyleSheet,
     ScrollView,
     Alert,
-    SafeAreaView,
     StatusBar,
     KeyboardAvoidingView,
     Platform,
     TouchableWithoutFeedback,
     Keyboard,
 } from "react-native";
-import Ionicons from '@react-native-vector-icons/ionicons'
+import Ionicons from '@react-native-vector-icons/ionicons';
+
+// Firebase imports
+import { cacheProfile } from "../../utils/profileCache";
+import { writeFirestoreOrQueue } from "../../utils/offlineWrites";
+import { withCoordinates } from "../../utils/geocode";
+import CauseChips from "../../components/sponsors/CauseChips";
+import { SDG_OPTIONS } from "../../utils/matchScore";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -29,15 +36,22 @@ const COLORS = {
     white: "#FFFFFF",
 };
 
-export default function NGOSetupScreen({ navigation }) {
+export default function NGOSetupScreen({ route, navigation }) {
+    // 1. Extract the uid and role passed from the previous screen
+    const { uid, role } = route.params || {};
+
     const [organisationName, setOrganisationName] = useState("");
     const [mission, setMission] = useState("");
     const [location, setLocation] = useState("");
     const [fundingRequired, setFundingRequired] = useState("");
     const [targetCommunity, setTargetCommunity] = useState("");
+    const [sdgs, setSdgs] = useState([]); // UN SDGs the NGO contributes to (optional)
+    const [blackBeneficiaryPercent, setBlackBeneficiaryPercent] = useState(""); // for B-BBEE (optional)
+    const [section18A, setSection18A] = useState([]); // ["Yes"] / ["No"] / [] (optional)
     const [focusedField, setFocusedField] = useState(null);
 
-    const handleContinue = () => {
+    // 2. Make this function async so we can talk to Firestore
+    const handleContinue = async () => {
         if (
             !organisationName.trim() ||
             !mission.trim() ||
@@ -52,16 +66,34 @@ export default function NGOSetupScreen({ navigation }) {
             return;
         }
 
-        navigation.navigate('MainTabs', {
-            screen: 'Home',
-            params: {
-                organisationName,
-                mission,
-                location,
-                fundingRequired,
-                targetCommunity,
-            },
-        });
+        try {
+            // 3. Update the existing document in the "users" collection
+            const profile = await withCoordinates({
+                role: role,
+                organisationName: organisationName,
+                mission: mission,
+                location: location,
+                fundingRequired: fundingRequired,
+                targetCommunity: targetCommunity,
+                sdgs: sdgs,
+                ...(blackBeneficiaryPercent.trim() !== "" && {
+                    blackBeneficiaryPercent: Math.max(0, Math.min(100, Number(blackBeneficiaryPercent) || 0)),
+                }),
+                ...(section18A.length > 0 && { section18A: section18A[0] === "Yes" }),
+                profileCompleted: true, // Helpful flag to know they finished setup
+            });
+            await writeFirestoreOrQueue("users", uid, profile);
+            await cacheProfile(uid, profile);
+
+            // 4. Navigate to the main app once the database saves successfully
+            navigation.navigate('MainTabs', {
+                screen: 'Home',
+                params: { organisationName },
+            });
+
+        } catch (error) {
+            Alert.alert("Error Saving Profile", error.message);
+        }
     };
 
     return (
@@ -276,11 +308,40 @@ export default function NGOSetupScreen({ navigation }) {
                                 </View>
                             </View>
 
+                            {/* CSR / ESG details (optional, used for the CSR/ESG match score) */}
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>SDGS YOU CONTRIBUTE TO (OPTIONAL)</Text>
+                                <CauseChips options={SDG_OPTIONS} selected={sdgs} onChange={setSdgs} />
+                            </View>
+
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>BLACK BENEFICIARIES, % (OPTIONAL)</Text>
+                                <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 8 }}>Helps sponsors claim B-BBEE socio-economic development points (75% or more counts in full).</Text>
+                                <View style={[styles.inputContainer, focusedField === "bbbee" && styles.inputContainerFocused]}>
+                                    <Ionicons name="pie-chart-outline" size={19} color={focusedField === "bbbee" ? COLORS.primary : COLORS.textSecondary} />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="e.g. 90"
+                                        placeholderTextColor={COLORS.placeholder}
+                                        value={blackBeneficiaryPercent}
+                                        onChangeText={setBlackBeneficiaryPercent}
+                                        keyboardType="numeric"
+                                        onFocus={() => setFocusedField("bbbee")}
+                                        onBlur={() => setFocusedField(null)}
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>SECTION 18A TAX CERTIFICATE (OPTIONAL)</Text>
+                                <CauseChips options={["Yes", "No"]} single selected={section18A} onChange={setSection18A} />
+                            </View>
+
                             {/* Create Profile Button */}
                             <TouchableOpacity
                                 style={styles.createButton}
                                 activeOpacity={0.85}
-                                onPress={handleContinue}
+                                onPress={handleContinue}        
                             >
                                 <Text style={styles.createButtonText}>Create Profile</Text>
                                 <Ionicons

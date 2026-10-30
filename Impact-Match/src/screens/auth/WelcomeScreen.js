@@ -1,69 +1,120 @@
 import React from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
-    Image,
-    SafeAreaStorage, // or use SafeAreaView from 'react-native-safe-area-context'
-    Dimensions
+    ImageBackground,
+    StatusBar,
+    Dimensions,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
+import Ionicons from "@react-native-vector-icons/ionicons";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
+
+// ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
+const COLORS = {
+    background: "#F8F6EE",       
+    primary: "#D9C982",          // Soft Luxury Gold
+    emerald: "#059669",          
+    buttonDark: "#013e37",       // Deep luxury green
+    textPrimary: "#433327",      
+    textSecondary: "#8C7A6B",    
+    white: "#FFFFFF",
+};
 
 export default function WelcomeScreen({ navigation }) {
+    const [fontsLoaded] = useFonts({
+        Manrope_400Regular,
+        Manrope_500Medium,
+        Manrope_600SemiBold,
+        Manrope_700Bold,
+    });
+
+    if (!fontsLoaded) {
+        return null;
+    }
+
     return (
         <View style={styles.container}>
-            {/* Top Illustration / Image Container */}
-            <View style={styles.imageContainer}>
-                <Image
-                    source={{
-                        uri: "https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?auto=format&fit=crop&q=80&w=1000",
-                    }}
-                    style={styles.heroImage}
-                    resizeMode="cover"
-                />
-                {/* Subtle gradient overlay effect */}
-                <View style={styles.imageOverlay} />
-            </View>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-            {/* Content Section */}
-            <View style={styles.contentContainer}>
-                <View>
-                    <Text style={styles.logo}>Impact<Text style={styles.logoHighlight}>Match</Text></Text>
+            {/* Immersive Full-Screen Background */}
+            <ImageBackground
+                source={{
+                    uri: "https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?auto=format&fit=crop&q=80&w=1000",
+                }}
+                style={styles.backgroundImage}
+                resizeMode="cover"
+            >
+                {/* Gradient Overlay for Text Readability */}
+                <LinearGradient
+                    colors={['rgba(1, 62, 55, 0.1)', 'rgba(1, 62, 55, 0.8)', '#013e37']}
+                    locations={[0, 0.5, 1]}
+                    style={styles.gradientOverlay}
+                >
+                    <SafeAreaView style={styles.safeArea}>
+                        
+                        {/* Top Logo */}
+                        <View style={styles.header}>
+                            {/* <View style={styles.logoBadge}> */}
+                                {/* <Ionicons name="leaf" size={16} color={COLORS.primary} /> */}
+                            {/* </View> */}
+                            
+                            <Text style={styles.logoText}>
+                                IMPACT<Text style={styles.logoHighlight}>MATCH</Text>
+                            </Text>
+                        </View>
 
-                    <Text style={styles.title}>
-                        Connect funding with meaningful impact.
-                    </Text>
+                        {/* Bottom Content Area */}
+                        <View style={styles.contentContainer}>
+                            <View style={styles.textWrapper}>
+                                <Text style={styles.title}>
+                                    Connect funding with meaningful impact.
+                                </Text>
 
-                    <Text style={styles.description}>
-                        Find the right organisations, discover sponsorship opportunities and create powerful, lasting partnerships.
-                    </Text>
-                </View>
+                                <Text style={styles.description}>
+                                    Find the right organisations, discover sponsorship opportunities, and create powerful, lasting partnerships.
+                                </Text>
+                            </View>
 
-                {/* Actions Section */}
-                <View style={styles.actionContainer}>
-                    <TouchableOpacity
-                        style={styles.primaryButton}
-                        activeOpacity={0.8}
-                        onPress={() => navigation.navigate("SignUp")}
-                    >
-                        <Text style={styles.primaryButtonText}>
-                            Get Started
-                        </Text>
-                    </TouchableOpacity>
+                            {/* Actions Section */}
+                            <View style={styles.actionContainer}>
+                                <TouchableOpacity
+                                    style={styles.primaryButton}
+                                    activeOpacity={0.9}
+                                    onPress={() => navigation.navigate("SignUp")}
+                                >
+                                    <Text style={styles.primaryButtonText}>
+                                        Get Started
+                                    </Text>
+                                    <Ionicons name="arrow-forward" size={20} color={COLORS.buttonDark} />
+                                </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.secondaryButton}
-                        activeOpacity={0.7}
-                        onPress={() => navigation.navigate("Login")}
-                    >
-                        <Text style={styles.loginText}>
-                            Already have an account? <Text style={styles.loginTextBold}>Log In</Text>
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+                                <TouchableOpacity
+                                    style={styles.secondaryButton}
+                                    activeOpacity={0.7}
+                                    onPress={() => navigation.navigate("Login")}
+                                >
+                                    <Text style={styles.loginText}>
+                                        Already have an account? <Text style={styles.loginTextBold}>Log In</Text>
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                    </SafeAreaView>
+                </LinearGradient>
+            </ImageBackground>
         </View>
     );
 }
@@ -71,87 +122,109 @@ export default function WelcomeScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#0F172A", // Deep modern slate dark theme
+        backgroundColor: COLORS.buttonDark,
     },
-    imageContainer: {
+    backgroundImage: {
         width: width,
-        height: width * 0.9, // Proportionate banner height
-        position: "relative",
+        height: height,
     },
-    heroImage: {
-        width: "100%",
-        height: "100%",
-        borderBottomLeftRadius: 36,
-        borderBottomRightRadius: 36,
-    },
-    imageOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(15, 23, 42, 0.2)", // Slight dark tint over image
-        borderBottomLeftRadius: 36,
-        borderBottomRightRadius: 36,
-    },
-    contentContainer: {
+    gradientOverlay: {
         flex: 1,
-        paddingHorizontal: 28,
-        paddingTop: 30,
-        paddingBottom: 40,
-        justifyContent: "space-between",
+        justifyContent: 'space-between',
     },
-    logo: {
-        fontSize: 24,
-        fontWeight: "800",
-        color: "#F8FAFC",
-        letterSpacing: 0.5,
-        marginBottom: 16,
-        textTransform: "uppercase",
+    safeArea: {
+        flex: 1,
+        justifyContent: 'space-between',
+    },
+    
+    /* Header / Logo */
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 32,
+        paddingTop: 20,
+    },
+    logoBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(217, 201, 130, 0.3)', // Soft gold border
+    },
+    logoText: {
+        fontFamily: "Manrope_700Bold",
+        fontSize: 18,
+        color: COLORS.white,
+        letterSpacing: 3,
     },
     logoHighlight: {
-        color: "#10B981", // Vibrant emerald green accent for "impact" feel
+        color: COLORS.primary,
+    },
+
+    /* Content Area */
+    contentContainer: {
+        paddingHorizontal: 32,
+        paddingBottom: 40,
+    },
+    textWrapper: {
+        marginBottom: 40,
     },
     title: {
-        fontSize: 30,
-        fontWeight: "700",
-        color: "#F1F5F9",
-        lineHeight: 38,
-        marginBottom: 12,
+        fontFamily: "Manrope_700Bold",
+        fontSize: 42,
+        color: COLORS.white,
+        lineHeight: 48,
+        marginBottom: 16,
+        letterSpacing: -1,
     },
     description: {
-        fontSize: 15,
-        color: "#94A3B8", // Muted light slate
-        lineHeight: 22,
+        fontFamily: "Manrope_400Regular",
+        fontSize: 16,
+        color: 'rgba(255, 255, 255, 0.8)', // Soft white
+        lineHeight: 26,
     },
+
+    /* Buttons */
     actionContainer: {
         width: "100%",
     },
     primaryButton: {
-        backgroundColor: "#10B981", // Emerald Green primary CTA
-        paddingVertical: 18,
-        borderRadius: 16,
+        flexDirection: 'row',
+        backgroundColor: COLORS.primary, // Gold button for high contrast luxury
+        height: 64,
+        borderRadius: 32,
+        justifyContent: "center",
         alignItems: "center",
-        shadowColor: "#10B981",
+        shadowColor: COLORS.primary,
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-        elevation: 6,
-        marginBottom: 16,
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+        elevation: 8,
+        marginBottom: 20,
     },
     primaryButtonText: {
-        color: "#FFFFFF",
-        fontSize: 16,
-        fontWeight: "700",
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.buttonDark, // Dark text on gold button
+        fontSize: 18,
         letterSpacing: 0.5,
+        marginRight: 10,
     },
     secondaryButton: {
         paddingVertical: 12,
         alignItems: "center",
     },
     loginText: {
+        fontFamily: "Manrope_500Medium",
         textAlign: "center",
         fontSize: 15,
-        color: "#94A3B8",
+        color: 'rgba(255, 255, 255, 0.7)',
     },
     loginTextBold: {
-        color: "#38BDF8", // Soft bright blue for the action link text
-        fontWeight: "600",
+        fontFamily: "Manrope_700Bold",
+        color: COLORS.primary, // Gold link text
     },
 });
