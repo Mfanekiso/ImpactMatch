@@ -34,7 +34,6 @@ import {
     where,
     onSnapshot,
     serverTimestamp,
-    orderBy,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -43,33 +42,33 @@ const { width } = Dimensions.get("window");
 const DEFAULT_IMAGE =
     "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=400&auto=format&fit=crop";
 
-// ─── LUXURY COLOR PALETTE (NGO Side) ──────────────────────────────────────
+// ─── BLUE THEMED PALETTE (NGO Impact Screen) ─────────────────────────────
 const COLORS = {
-    background: "#F8F6EE",       // Cream base
-    surface: "#FFFFFF",          // Clean white
-    primary: "#D9C982",          // Soft Luxury Gold
-    primarySoft: "rgba(217, 201, 130, 0.2)",
+    background: "#E8F1FC",       // Distinct, elegant blue base
+    surface: "#FFFFFF",          // Crisp white
+    primary: "#2563EB",          // Vibrant Blue
+    primarySoft: "rgba(37, 99, 235, 0.12)",
     emerald: "#059669",          // Vibrant Emerald
     emeraldSoft: "rgba(5, 150, 105, 0.1)",
-    buttonDark: "#433327",       // Warm Bronze (NGO Primary)
-    buttonDarkSoft: "rgba(67, 51, 39, 0.08)",
-    textPrimary: "#433327",      // Warm Bronze
-    textSecondary: "#8C7A6B",    // Muted taupe
-    border: "#E8DFD5",
+    buttonDark: "#1E40AF",       // Dark Blue (NGO Primary)
+    buttonDarkSoft: "rgba(30, 64, 175, 0.08)",
+    textPrimary: "#1E293B",      // Slate navy
+    textSecondary: "#64748B",    // Slate taupe
+    border: "#BFDBFE",           // Sky blue border
     danger: "#DC2626",           // Elegant red
     dangerSoft: "rgba(220, 38, 38, 0.1)",
     white: "#FFFFFF",
 };
 
 const softShadow = {
-    shadowColor: COLORS.textPrimary,
+    shadowColor: "#1E3A8A",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 2,
 };
 
-export default function NgoImpactScreen() {
+export default function NgoImpactScreen({ navigation }) {
     const [fontsLoaded] = useFonts({
         Manrope_400Regular,
         Manrope_500Medium,
@@ -78,14 +77,16 @@ export default function NgoImpactScreen() {
     });
 
     const [projects, setProjects] = useState([]);
+    const [payments, setPayments] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [paymentsLoading, setPaymentsLoading] = useState(true);
 
-    // Edit modal state
+    // Update modal state
     const [modalVisible, setModalVisible] = useState(false);
     const [editingProjectId, setEditingProjectId] = useState(null);
     const [submitting, setSubmitting] = useState(false);
 
-    // Edit form fields
+    // Update form fields
     const [title, setTitle] = useState("");
     const [category, setCategory] = useState("");
     const [beneficiaries, setBeneficiaries] = useState("");
@@ -123,7 +124,8 @@ export default function NgoImpactScreen() {
     }, [deletePhase, deletePulse]);
 
     useEffect(() => {
-        let unsubscribeProjects = null;
+        let unsubscribeProjects = [];
+        let unsubscribePayments = () => {};
         let active = true;
 
         Animated.parallel([
@@ -145,42 +147,92 @@ export default function NgoImpactScreen() {
         ]).start();
 
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-            if (unsubscribeProjects) {
-                unsubscribeProjects();
-                unsubscribeProjects = null;
-            }
+            unsubscribeProjects.forEach((unsubscribe) => unsubscribe());
+            unsubscribeProjects = [];
+            unsubscribePayments();
 
             if (!user) {
                 setProjects([]);
+                setPayments([]);
                 setLoading(false);
+                setPaymentsLoading(false);
                 return;
             }
 
             setLoading(true);
-            const projectsRef = collection(db, "projects");
-            const projectsQuery = query(
-                projectsRef,
-                where("ngoOwnerId", "==", user.uid),
-                orderBy("createdAt", "desc")
-            );
+            setPaymentsLoading(true);
+            setProjects([]);
+            const projectResults = new Map([
+                ["ngoOwnerId", new Map()],
+                ["ownerId", new Map()],
+            ]);
+            let receivedFirstSnapshot = false;
+            const publishProjects = () => {
+                if (!active) return;
+                const mergedProjects = new Map();
+                projectResults.forEach((fieldProjects) => {
+                    fieldProjects.forEach((project, projectId) => mergedProjects.set(projectId, project));
+                });
+                const fetchedProjects = [...mergedProjects.values()].sort((left, right) => {
+                    const leftCreated = left.createdAt?.toMillis?.() ?? 0;
+                    const rightCreated = right.createdAt?.toMillis?.() ?? 0;
+                    return rightCreated - leftCreated;
+                });
+                setProjects(fetchedProjects);
+                setLoading(false);
+            };
 
-            unsubscribeProjects = onSnapshot(
-                projectsQuery,
+            // Listen to projects belonging to this NGO
+            ["ngoOwnerId", "ownerId"].forEach((ownerField) => {
+                const projectsQuery = query(
+                    collection(db, "projects"),
+                    where(ownerField, "==", user.uid)
+                );
+                const unsubscribe = onSnapshot(
+                    projectsQuery,
+                    (snapshot) => {
+                        if (!active) return;
+                        const fieldProjects = projectResults.get(ownerField);
+                        fieldProjects.clear();
+                        snapshot.docs.forEach((projectDoc) => {
+                            fieldProjects.set(projectDoc.id, {
+                                id: projectDoc.id,
+                                ...projectDoc.data(),
+                            });
+                        });
+                        receivedFirstSnapshot = true;
+                        publishProjects();
+                    },
+                    (error) => {
+                        console.error(`Could not load NGO projects by ${ownerField}:`, error);
+                        if (!active) return;
+                        if (receivedFirstSnapshot) publishProjects();
+                        else setLoading(false);
+                    }
+                );
+                unsubscribeProjects.push(unsubscribe);
+            });
+
+            // Listen to real-time payments received from sponsors for this NGO
+            const paymentsQuery = query(
+                collection(db, "payments"),
+                where("ngoId", "==", user.uid)
+            );
+            unsubscribePayments = onSnapshot(
+                paymentsQuery,
                 (snapshot) => {
                     if (!active) return;
-                    const fetchedProjects = snapshot.docs.map((projectDoc) => ({
-                        id: projectDoc.id,
-                        ...projectDoc.data(),
+                    const list = snapshot.docs.map((docSnap) => ({
+                        id: docSnap.id,
+                        ...docSnap.data(),
                     }));
-                    setProjects(fetchedProjects);
-                    setLoading(false);
+                    list.sort((a, b) => (b.paidAt?.toMillis?.() || 0) - (a.paidAt?.toMillis?.() || 0));
+                    setPayments(list);
+                    setPaymentsLoading(false);
                 },
                 (error) => {
-                    console.error("Could not load NGO projects:", error);
-                    if (!active) return;
-                    setProjects([]);
-                    setLoading(false);
-                    Alert.alert("Could not load projects", error.message);
+                    console.warn("Could not load NGO payments:", error?.message);
+                    if (active) setPaymentsLoading(false);
                 }
             );
         });
@@ -188,7 +240,8 @@ export default function NgoImpactScreen() {
         return () => {
             active = false;
             unsubscribeAuth();
-            if (unsubscribeProjects) unsubscribeProjects();
+            unsubscribeProjects.forEach((unsubscribe) => unsubscribe());
+            unsubscribePayments();
         };
     }, [fadeAnim, slideAnim, barAnim]);
 
@@ -197,7 +250,7 @@ export default function NgoImpactScreen() {
         const uid = auth.currentUser?.uid;
 
         if (!uid || (project.ngoOwnerId !== uid && project.ownerId !== uid)) {
-            Alert.alert("Access denied", "You can only edit projects belonging to your organisation.");
+            Alert.alert("Access denied", "You can only update projects belonging to your organisation.");
             return;
         }
 
@@ -218,12 +271,12 @@ export default function NgoImpactScreen() {
     const handleSaveProject = async () => {
         const user = auth.currentUser;
         if (!user) {
-            Alert.alert("Sign in required", "Please sign in before editing a project.");
+            Alert.alert("Sign in required", "Please sign in before updating a project.");
             return;
         }
 
         if (!editingProjectId) {
-            Alert.alert("No project selected", "Open an existing project before saving changes.");
+            Alert.alert("No project selected", "Open an existing project before updating changes.");
             return;
         }
 
@@ -269,7 +322,7 @@ export default function NgoImpactScreen() {
 
             setModalVisible(false);
             setEditingProjectId(null);
-            Alert.alert("Project updated", "Your changes have been saved to the database.");
+            Alert.alert("Project updated", "Your updates have been saved to the database.");
         } catch (error) {
             console.error("Project update failed:", error);
             Alert.alert("Could not update project", error.message);
@@ -324,16 +377,21 @@ export default function NgoImpactScreen() {
     };
 
     const totalRaised = projects.reduce((total, project) => total + (Number(project.raisedAmount) || 0), 0);
+    const totalPaymentsReceived = payments
+        .filter((p) => p.status === "complete")
+        .reduce((sum, p) => sum + (Number(p.sponsorshipAmount) || 0), 0);
+    const displayTotalRaised = Math.max(totalRaised, totalPaymentsReceived);
+
     const totalBeneficiaries = projects.reduce((total, project) => total + (Number(project.beneficiariesCount ?? project.beneficiaries) || 0), 0);
-    const totalActiveProjects = projects.filter(
-        (project) => project.status !== "Completed" && project.status !== "completed" && project.status !== "closed"
+    const totalActiveProjects = projects.filter((project) =>
+        !["completed", "closed"].includes(String(project.status || "").toLowerCase())
     ).length;
 
     const SUMMARY_STATS = [
-        { id: "1", label: "Raised", value: `R${totalRaised.toLocaleString("en-ZA")}`, bgColor: COLORS.primarySoft, color: COLORS.textPrimary },
+        { id: "1", label: "Raised", value: `R${displayTotalRaised.toLocaleString("en-ZA")}`, bgColor: COLORS.primarySoft, color: COLORS.primary },
         { id: "2", label: "Active", value: String(totalActiveProjects), bgColor: COLORS.emeraldSoft, color: COLORS.emerald },
         { id: "3", label: "Total Proj.", value: String(projects.length), bgColor: COLORS.surface, color: COLORS.textPrimary, border: COLORS.border },
-        { id: "4", label: "Impacted", value: totalBeneficiaries.toLocaleString("en-ZA"), bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
+        { id: "4", label: "Payments", value: String(payments.length), bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
     ];
 
     if (!fontsLoaded) return null;
@@ -359,7 +417,7 @@ export default function NgoImpactScreen() {
                     >
                         <Text style={styles.headerTitle}>Impact Management</Text>
                         <Text style={styles.headerSubtitle}>
-                            View, edit and manage your organisation's existing projects.
+                            View, update and manage your organisation's projects and sponsor funding.
                         </Text>
 
                         {/* SUMMARY CARDS */}
@@ -382,20 +440,20 @@ export default function NgoImpactScreen() {
                         </View>
                     </Animated.View>
 
-                    {/* PROJECTS */}
+                    {/* PROJECTS SECTION */}
                     <View style={styles.sectionHeaderRow}>
                         <Text style={styles.sectionHeaderTitle}>Your Projects</Text>
                         <Text style={styles.sectionHeaderCount}>{projects.length} Total</Text>
                     </View>
 
                     {loading ? (
-                        <ActivityIndicator size="large" color={COLORS.buttonDark} style={{ marginVertical: 40 }} />
+                        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 40 }} />
                     ) : projects.length === 0 ? (
                         <View style={styles.emptyContainer}>
                             <Ionicons name="folder-open-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 12 }} />
                             <Text style={styles.emptyTitle}>No Projects Found</Text>
                             <Text style={styles.emptySubText}>
-                                Projects you publish from the Create a Project screen will appear here. You can then edit or delete them.
+                                Projects you publish from the Create a Project screen will appear here. You can then update or manage them.
                             </Text>
                         </View>
                     ) : (
@@ -406,7 +464,8 @@ export default function NgoImpactScreen() {
                             const ratio = goal > 0 ? Math.min(Math.max(raised / goal, 0), 1) : 0;
                             const percentText = `${Math.round(ratio * 100)}%`;
 
-                            const isCompleted = project.status === "Completed" || project.status === "completed" || project.status === "closed";
+                            const projectStatus = String(project.status || "active").toLowerCase();
+                            const isCompleted = ["completed", "closed"].includes(projectStatus);
                             const displayStatus = isCompleted ? "Completed" : "Active";
 
                             return (
@@ -429,17 +488,6 @@ export default function NgoImpactScreen() {
                                                             {displayStatus}
                                                         </Text>
                                                     </View>
-
-                                                    <TouchableOpacity
-                                                        style={styles.moreButton}
-                                                        accessibilityLabel={`Manage ${project.title}`}
-                                                        onPress={() => {
-                                                            setSelectedProject(project);
-                                                            setOptionsVisible(true);
-                                                        }}
-                                                    >
-                                                        <Ionicons name="ellipsis-vertical" size={20} color={COLORS.textSecondary} />
-                                                    </TouchableOpacity>
                                                 </View>
                                             </View>
 
@@ -479,13 +527,97 @@ export default function NgoImpactScreen() {
                                             {percentText} of R{goal.toLocaleString("en-ZA")}
                                         </Text>
                                     </View>
+
+                                    <TouchableOpacity
+                                        accessibilityRole="button"
+                                        onPress={() => navigation.navigate("NGOProjectDetail", { projectId: project.id })}
+                                        style={{ alignSelf: "flex-start", paddingTop: 12 }}
+                                    >
+                                        <Text style={styles.projectBeneficiaries}>View project updates</Text>
+                                    </TouchableOpacity>
+
+                                    {/* ACTION BUTTONS: ARCHIVE REMOVED, EDIT REPLACED WITH UPDATE */}
+                                    <View style={styles.projectActions}>
+                                        <TouchableOpacity
+                                            style={styles.projectActionButton}
+                                            onPress={() => handleOpenEditModal(project)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`Update ${project.title || "project"}`}
+                                        >
+                                            <Text style={styles.projectActionText}>Update</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.projectActionButton, styles.deleteActionButton]}
+                                            onPress={() => handleDeleteProject(project)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`Delete ${project.title || "project"}`}
+                                        >
+                                            <Text style={styles.deleteActionText}>Delete</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            );
+                        })
+                    )}
+
+                    {/* SPONSORSHIP PAYMENTS RECEIVED SECTION */}
+                    <View style={[styles.sectionHeaderRow, { marginTop: 22 }]}>
+                        <Text style={styles.sectionHeaderTitle}>Sponsorship Payments</Text>
+                        <Text style={styles.sectionHeaderCount}>{payments.length} Received</Text>
+                    </View>
+
+                    {paymentsLoading ? (
+                        <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 18 }} />
+                    ) : payments.length === 0 ? (
+                        <View style={styles.paymentEmptyCard}>
+                            <Ionicons name="card-outline" size={32} color={COLORS.textSecondary} style={{ marginBottom: 6 }} />
+                            <Text style={styles.paymentEmptyTitle}>No Payments Received Yet</Text>
+                            <Text style={styles.paymentEmptySub}>
+                                When sponsors contribute through the payment API, confirmed sponsorships will appear here in real time.
+                            </Text>
+                        </View>
+                    ) : (
+                        payments.map((pmt) => {
+                            const paidDate = pmt.paidAt?.toDate?.()
+                                ? pmt.paidAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
+                                : "Recently confirmed";
+                            return (
+                                <View key={pmt.id} style={styles.paymentCard}>
+                                    <View style={styles.paymentCardHeader}>
+                                        <View style={styles.paymentIconWrap}>
+                                            <Ionicons name="cash" size={20} color={COLORS.emerald} />
+                                        </View>
+                                        <View style={styles.paymentMeta}>
+                                            <Text style={styles.paymentProjectTitle} numberOfLines={1}>
+                                                {pmt.projectTitle || "Project sponsorship"}
+                                            </Text>
+                                            <Text style={styles.paymentSponsorName}>
+                                                From {pmt.sponsorName || "Sponsor"}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.paymentAmountCol}>
+                                            <Text style={styles.paymentAmount}>
+                                                +R{Number(pmt.sponsorshipAmount || 0).toLocaleString("en-ZA")}
+                                            </Text>
+                                            <View style={styles.paymentVerifiedBadge}>
+                                                <Text style={styles.paymentVerifiedText}>PayFast API</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                    <View style={styles.paymentCardFooter}>
+                                        <Text style={styles.paymentDate}>{paidDate}</Text>
+                                        <Text style={styles.paymentRef}>
+                                            Ref: {pmt.transactionReference || pmt.paymentId || pmt.id}
+                                        </Text>
+                                    </View>
                                 </View>
                             );
                         })
                     )}
                 </ScrollView>
 
-                {/* EDIT EXISTING PROJECT MODAL */}
+                {/* UPDATE EXISTING PROJECT MODAL (REPLACED EDIT WITH UPDATE) */}
                 <Modal
                     visible={modalVisible}
                     animationType="slide"
@@ -496,7 +628,7 @@ export default function NgoImpactScreen() {
                 >
                     <View style={styles.modalOverlay}>
                         <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}>Edit Project</Text>
+                            <Text style={styles.modalTitle}>Update Project</Text>
                             <Text style={styles.modalSubtitle}>
                                 Update the details of this existing project. Your changes will be saved to Firestore.
                             </Text>
@@ -582,7 +714,7 @@ export default function NgoImpactScreen() {
                                         {submitting ? (
                                             <ActivityIndicator color={COLORS.white} size="small" />
                                         ) : (
-                                            <Text style={styles.submitButtonText}>Save Changes</Text>
+                                            <Text style={styles.submitButtonText}>Update Project</Text>
                                         )}
                                     </TouchableOpacity>
                                 </View>
@@ -591,7 +723,7 @@ export default function NgoImpactScreen() {
                     </View>
                 </Modal>
 
-                {/* EDIT / DELETE OPTIONS BOTTOM SHEET */}
+                {/* UPDATE / DELETE OPTIONS BOTTOM SHEET */}
                 <Modal visible={optionsVisible} animationType="fade" transparent onRequestClose={() => setOptionsVisible(false)}>
                     <TouchableOpacity style={styles.optionsOverlay} activeOpacity={1} onPress={() => setOptionsVisible(false)}>
                         <View style={styles.optionsSheet}>
@@ -599,7 +731,7 @@ export default function NgoImpactScreen() {
 
                             <TouchableOpacity style={styles.optionItem} onPress={() => handleOpenEditModal(selectedProject)}>
                                 <Ionicons name="pencil" size={20} color={COLORS.buttonDark} style={{ marginRight: 12 }} />
-                                <Text style={styles.optionText}>Edit Project Details</Text>
+                                <Text style={styles.optionText}>Update Project Details</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={[styles.optionItem, styles.optionItemDelete]} onPress={() => handleDeleteProject(selectedProject)}>
@@ -687,19 +819,19 @@ export default function NgoImpactScreen() {
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.background },
     container: { flex: 1, backgroundColor: COLORS.background },
-    scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 112 },
+    scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 112 },
 
-    headerContainer: { marginBottom: 24 },
+    headerContainer: { marginBottom: 20 },
     headerTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
     headerTitle: { fontFamily: "Manrope_700Bold", fontSize: 28, color: COLORS.textPrimary, letterSpacing: -0.5 },
-    headerSubtitle: { fontFamily: "Manrope_500Medium", fontSize: 14, color: COLORS.textSecondary, marginBottom: 24 },
+    headerSubtitle: { fontFamily: "Manrope_500Medium", fontSize: 14, color: COLORS.textSecondary, marginBottom: 20 },
 
     statsGrid: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
     statCard: { flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: "center", ...softShadow },
     statValue: { fontFamily: "Manrope_700Bold", fontSize: 16 },
     statLabel: { fontFamily: "Manrope_600SemiBold", fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
 
-    sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12, marginBottom: 16 },
+    sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12, marginBottom: 14 },
     sectionHeaderTitle: { fontFamily: "Manrope_700Bold", fontSize: 18, color: COLORS.textPrimary },
     sectionHeaderCount: { fontFamily: "Manrope_600SemiBold", fontSize: 13, color: COLORS.textSecondary },
 
@@ -715,60 +847,83 @@ const styles = StyleSheet.create({
     statusBadgeActive: { backgroundColor: COLORS.primarySoft },
     statusBadgeCompleted: { backgroundColor: COLORS.emeraldSoft },
     statusBadgeText: { fontFamily: "Manrope_700Bold", fontSize: 10, textTransform: "uppercase" },
-    statusTextActive: { color: COLORS.buttonDark },
+    statusTextActive: { color: COLORS.primary },
     statusTextCompleted: { color: COLORS.emerald },
-    moreButton: { paddingHorizontal: 4, marginLeft: 4 },
     
     projectCategory: { fontFamily: "Manrope_500Medium", fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
     beneficiaryRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
-    projectBeneficiaries: { fontFamily: "Manrope_600SemiBold", fontSize: 12, color: COLORS.emerald },
+    projectBeneficiaries: { fontFamily: "Manrope_600SemiBold", fontSize: 12, color: COLORS.primary },
 
-    progressBarTrack: { height: 8, backgroundColor: COLORS.background, borderRadius: 4, marginTop: 16, overflow: "hidden" },
-    progressBarFill: { height: "100%", backgroundColor: COLORS.emerald },
+    progressBarTrack: { height: 8, backgroundColor: "#DBEAFE", borderRadius: 4, marginTop: 16, overflow: "hidden" },
+    progressBarFill: { height: "100%", backgroundColor: COLORS.primary },
     progressValueRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
-    raisedText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.emerald },
+    raisedText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.primary },
     goalText: { fontFamily: "Manrope_600SemiBold", fontSize: 12, color: COLORS.textSecondary },
+    
+    projectActions: { flexDirection: "row", gap: 10, marginTop: 14 },
+    projectActionButton: { flex: 1, height: 42, borderRadius: 12, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center" },
+    projectActionText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.buttonDark },
+    deleteActionButton: { borderColor: COLORS.dangerSoft, backgroundColor: COLORS.dangerSoft },
+    deleteActionText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.danger },
 
     emptyContainer: { backgroundColor: COLORS.surface, padding: 32, borderRadius: 20, alignItems: "center", borderWidth: 1, borderColor: COLORS.border, marginTop: 12 },
     emptyTitle: { fontFamily: "Manrope_700Bold", fontSize: 18, color: COLORS.textPrimary },
     emptySubText: { fontFamily: "Manrope_500Medium", fontSize: 14, color: COLORS.textSecondary, textAlign: "center", marginTop: 8, lineHeight: 22 },
 
-    /* Edit Modal */
-    modalOverlay: { flex: 1, backgroundColor: "rgba(67, 51, 39, 0.4)", justifyContent: "center", padding: 16 },
+    /* Received Payments Card & Section */
+    paymentCard: { backgroundColor: COLORS.surface, borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border, ...softShadow },
+    paymentCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+    paymentIconWrap: { width: 38, height: 38, borderRadius: 10, backgroundColor: COLORS.emeraldSoft, alignItems: "center", justifyContent: "center" },
+    paymentMeta: { flex: 1 },
+    paymentProjectTitle: { fontFamily: "Manrope_700Bold", fontSize: 14, color: COLORS.textPrimary },
+    paymentSponsorName: { fontFamily: "Manrope_500Medium", fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+    paymentAmountCol: { alignItems: "flex-end" },
+    paymentAmount: { fontFamily: "Manrope_700Bold", fontSize: 15, color: COLORS.emerald },
+    paymentVerifiedBadge: { backgroundColor: COLORS.primarySoft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginTop: 3 },
+    paymentVerifiedText: { fontFamily: "Manrope_700Bold", fontSize: 9, color: COLORS.primary },
+    paymentCardFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#EFF6FF" },
+    paymentDate: { fontFamily: "Manrope_500Medium", fontSize: 11, color: COLORS.textSecondary },
+    paymentRef: { fontFamily: "Manrope_500Medium", fontSize: 11, color: COLORS.textSecondary, opacity: 0.8 },
+    paymentEmptyCard: { backgroundColor: COLORS.surface, padding: 24, borderRadius: 16, alignItems: "center", borderWidth: 1, borderColor: COLORS.border, marginBottom: 12 },
+    paymentEmptyTitle: { fontFamily: "Manrope_700Bold", fontSize: 15, color: COLORS.textPrimary },
+    paymentEmptySub: { fontFamily: "Manrope_500Medium", fontSize: 12, color: COLORS.textSecondary, textAlign: "center", marginTop: 4, lineHeight: 18 },
+
+    /* Update Modal */
+    modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.45)", justifyContent: "center", padding: 16 },
     modalContent: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, maxHeight: "90%", ...softShadow },
     modalTitle: { fontFamily: "Manrope_700Bold", fontSize: 20, color: COLORS.textPrimary },
     modalSubtitle: { fontFamily: "Manrope_500Medium", fontSize: 13, color: COLORS.textSecondary, marginBottom: 20, marginTop: 4, lineHeight: 20 },
     inputLabel: { fontFamily: "Manrope_600SemiBold", fontSize: 13, color: COLORS.textPrimary, marginTop: 12, marginBottom: 6 },
-    textInput: { fontFamily: "Manrope_500Medium", borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 14, backgroundColor: COLORS.background, color: COLORS.textPrimary },
+    textInput: { fontFamily: "Manrope_500Medium", borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 14, backgroundColor: "#F8FAFC", color: COLORS.textPrimary },
     
     statusToggleRow: { flexDirection: "row", gap: 12, marginTop: 8 },
     statusOption: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, alignItems: "center" },
     statusOptionActive: { backgroundColor: COLORS.primarySoft, borderColor: COLORS.primary },
     statusOptionCompleted: { backgroundColor: COLORS.emeraldSoft, borderColor: COLORS.emerald },
     statusOptionText: { fontFamily: "Manrope_600SemiBold", fontSize: 13, color: COLORS.textSecondary },
-    statusOptionTextSelected: { color: COLORS.buttonDark, fontFamily: "Manrope_700Bold" },
+    statusOptionTextSelected: { color: COLORS.primary, fontFamily: "Manrope_700Bold" },
     statusOptionTextCompleted: { color: COLORS.emerald, fontFamily: "Manrope_700Bold" },
 
     modalActions: { flexDirection: "row", justifyContent: "flex-end", marginTop: 28, gap: 12 },
-    cancelButton: { paddingVertical: 14, paddingHorizontal: 24, borderRadius: 30, backgroundColor: COLORS.background },
+    cancelButton: { paddingVertical: 14, paddingHorizontal: 24, borderRadius: 30, backgroundColor: "#EFF6FF" },
     cancelButtonText: { fontFamily: "Manrope_700Bold", color: COLORS.textSecondary, fontSize: 14 },
     submitButton: { paddingVertical: 14, paddingHorizontal: 24, borderRadius: 30, backgroundColor: COLORS.buttonDark, minWidth: 120, alignItems: "center", justifyContent: "center" },
     submitButtonDisabled: { opacity: 0.65 },
     submitButtonText: { fontFamily: "Manrope_700Bold", color: COLORS.white, fontSize: 14 },
 
     /* Options Sheet */
-    optionsOverlay: { flex: 1, backgroundColor: "rgba(67, 51, 39, 0.4)", justifyContent: "flex-end" },
+    optionsOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.45)", justifyContent: "flex-end" },
     optionsSheet: { backgroundColor: COLORS.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24 },
     optionsHeader: { fontFamily: "Manrope_700Bold", fontSize: 16, color: COLORS.textPrimary, marginBottom: 20, textAlign: "center" },
-    optionItem: { flexDirection: "row", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: COLORS.background },
+    optionItem: { flexDirection: "row", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: "#EFF6FF" },
     optionText: { fontFamily: "Manrope_600SemiBold", fontSize: 15, color: COLORS.textPrimary },
     optionItemDelete: { borderBottomWidth: 0 },
     optionTextDelete: { fontFamily: "Manrope_600SemiBold", fontSize: 15, color: COLORS.danger },
-    cancelOptionItem: { marginTop: 16, paddingVertical: 16, backgroundColor: COLORS.background, borderRadius: 16, alignItems: "center" },
+    cancelOptionItem: { marginTop: 16, paddingVertical: 16, backgroundColor: "#EFF6FF", borderRadius: 16, alignItems: "center" },
     cancelOptionText: { fontFamily: "Manrope_700Bold", fontSize: 15, color: COLORS.textSecondary },
 
     /* Delete confirmation and progress modal */
-    deleteOverlay: { flex: 1, backgroundColor: "rgba(67, 51, 39, 0.48)", justifyContent: "center", alignItems: "center", padding: 24 },
+    deleteOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.48)", justifyContent: "center", alignItems: "center", padding: 24 },
     deleteDialog: { width: "100%", maxWidth: 420, backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, alignItems: "center", ...softShadow },
     deleteIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.dangerSoft, alignItems: "center", justifyContent: "center", marginBottom: 16 },
     deleteProgressIcon: { backgroundColor: COLORS.dangerSoft },
@@ -778,7 +933,7 @@ const styles = StyleSheet.create({
     deleteMessage: { fontFamily: "Manrope_500Medium", fontSize: 14, lineHeight: 21, color: COLORS.textSecondary, textAlign: "center", marginTop: 8 },
     deleteError: { fontFamily: "Manrope_600SemiBold", fontSize: 13, color: COLORS.danger, textAlign: "center", marginTop: 12 },
     deleteActions: { flexDirection: "row", width: "100%", gap: 12, marginTop: 24 },
-    deleteNoButton: { flex: 1, paddingVertical: 14, borderRadius: 24, backgroundColor: COLORS.background, alignItems: "center", justifyContent: "center" },
+    deleteNoButton: { flex: 1, paddingVertical: 14, borderRadius: 24, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center" },
     deleteNoText: { fontFamily: "Manrope_700Bold", fontSize: 14, color: COLORS.textSecondary },
     deleteYesButton: { flex: 1, paddingVertical: 14, borderRadius: 24, backgroundColor: COLORS.danger, alignItems: "center", justifyContent: "center" },
     deleteYesText: { fontFamily: "Manrope_700Bold", fontSize: 14, color: COLORS.white },

@@ -13,7 +13,7 @@ import {
     ActivityIndicator,
 } from "react-native";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { db } from "../../../Backend/firebaseConfig";
+import { auth, db } from "../../../Backend/firebaseConfig";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import {
   useFonts,
@@ -67,7 +67,8 @@ const FUNDING_BY_CAUSE = [
   { cause: "Other", percentage: 9, heightPct: 0.22 },
 ];
 
-export default function ImpactDashboardScreen() {
+// CHANGED: the screen now receives "navigation" so a project card can open the proposal screen
+export default function ImpactDashboardScreen({ navigation }) {
   const [fontsLoaded] = useFonts({
     Manrope_400Regular,
     Manrope_500Medium,
@@ -77,13 +78,55 @@ export default function ImpactDashboardScreen() {
   const [projects, setProjects] = React.useState([]);
   const [projectsLoading, setProjectsLoading] = React.useState(true);
   const [projectsError, setProjectsError] = React.useState(false);
+  const [interests, setInterests] = React.useState([]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const barAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
+    const user = auth.currentUser;
+    if (!user) {
+      setProjects([]);
+      setProjectsLoading(false);
+      return undefined;
+    }
+
+    let interestedNgoIds = new Set();
+    let rawProjects = [];
+
+    const filterAndSetProjects = () => {
+      // Only include projects belonging to NGOs the sponsor has said "interested" to
+      const filtered = rawProjects.filter((p) => {
+        const ngoId = p.ngoOwnerId || p.ownerId || p.ngoId;
+        return ngoId && interestedNgoIds.has(ngoId);
+      });
+      setProjects(filtered);
+      setProjectsLoading(false);
+      setProjectsError(false);
+    };
+
+    // 1. Listen to this sponsor's expressed interests
+    const unsubInterests = onSnapshot(
+      query(collection(db, "interests"), where("sponsorId", "==", user.uid)),
+      (snapshot) => {
+        const set = new Set();
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.ngoId && data.interested === true) {
+            set.add(data.ngoId);
+          }
+        });
+        interestedNgoIds = set;
+        filterAndSetProjects();
+      },
+      (err) => {
+        console.warn("Could not load sponsor interests:", err?.message);
+      }
+    );
+
+    // 2. Listen to projects
+    const unsubProjects = onSnapshot(
       query(
         collection(db, "projects"),
         where("status", "in", ["open", "active", "Active", "completed", "Completed"])
@@ -91,9 +134,8 @@ export default function ImpactDashboardScreen() {
       (snapshot) => {
         const rows = snapshot.docs.map((projectDoc) => ({ id: projectDoc.id, ...projectDoc.data() }));
         rows.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-        setProjects(rows);
-        setProjectsLoading(false);
-        setProjectsError(false);
+        rawProjects = rows;
+        filterAndSetProjects();
       },
       (error) => {
         console.warn("Could not load sponsor impact projects:", error?.message);
@@ -101,16 +143,40 @@ export default function ImpactDashboardScreen() {
         setProjectsError(true);
       }
     );
-    return unsubscribe;
+
+    return () => {
+      unsubInterests();
+      unsubProjects();
+    };
   }, []);
 
-  const totalFundingGoal = projects.reduce((sum, project) => sum + (Number(project.fundingGoal ?? project.goalAmount) || 0), 0);
-  const totalPartners = new Set(projects.map((project) => project.orgName || project.ngoName).filter(Boolean)).size;
-  const totalPeople = projects.reduce((sum, project) => sum + (Number(project.beneficiariesCount ?? project.beneficiaries) || 0), 0);
+  // The sponsor's saved / interested NGOs decide which projects count as "your" impact
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return undefined;
+    return onSnapshot(
+      query(collection(db, "interests"), where("sponsorId", "==", uid)),
+      (snapshot) => setInterests(snapshot.docs.map((d) => d.data())),
+      (error) => console.warn("Could not load interests:", error?.message)
+    );
+  }, []);
+
+  const scoped = React.useMemo(() => selectPartnerProjects(projects, interests), [projects, interests]);
+  const myProjects = scoped.projects;
+  const beneficiarySeries = React.useMemo(() => beneficiariesByMonth(myProjects, 6), [myProjects]);
+  const beneficiaryMax = Math.max(1, ...beneficiarySeries.map((p) => p.value));
+  const growth = growthPercent(beneficiarySeries);
+  const causeShares = React.useMemo(() => fundingByCause(myProjects, 5), [myProjects]);
+  const causeMax = Math.max(1, ...causeShares.map((c) => c.percentage));
+  const story = topStory(myProjects);
+
+  const totalRaised = myProjects.reduce((sum, project) => sum + projectRaised(project), 0);
+  const totalPartners = new Set(myProjects.map((project) => project.ownerId || project.orgName || project.ngoName).filter(Boolean)).size;
+  const totalPeople = myProjects.reduce((sum, project) => sum + projectBeneficiaries(project), 0);
   const summaryStats = [
-    { id: "1", label: "Funding", value: `R${totalFundingGoal.toLocaleString("en-ZA")}`, bgColor: COLORS.primarySoft, color: COLORS.buttonDark },
+    { id: "1", label: "Raised", value: `R${compact(totalRaised)}`, bgColor: COLORS.primarySoft, color: COLORS.buttonDark },
     { id: "2", label: "Partners", value: String(totalPartners), bgColor: COLORS.emeraldSoft, color: COLORS.emerald },
-    { id: "3", label: "Projects", value: String(projects.length), bgColor: COLORS.surface, color: COLORS.textPrimary, border: COLORS.border },
+    { id: "3", label: "Projects", value: String(myProjects.length), bgColor: COLORS.surface, color: COLORS.textPrimary, border: COLORS.border },
     { id: "4", label: "People", value: totalPeople.toLocaleString("en-ZA"), bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
   ];
 
@@ -148,7 +214,9 @@ export default function ImpactDashboardScreen() {
           <Animated.View style={[styles.headerContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
             <Text style={styles.headerTitle}>Your Impact</Text>
             <Text style={styles.headerSubtitle}>
-              See what your partnerships are achieving.
+              {scoped.scope === "partners"
+                ? `Live results from the ${totalPartners} organisation${totalPartners === 1 ? "" : "s"} you have saved or shown interest in.`
+                : "Live results across all projects on ImpactMatch. Save or express interest in NGOs to track your own partners."}
             </Text>
 
             {/* Top Stat Cards Grid */}
@@ -169,117 +237,56 @@ export default function ImpactDashboardScreen() {
             </View>
           </Animated.View>
 
-          {/* Section 1: Beneficiaries Over Time */}
+          {/* Section 1: Beneficiaries reached, running total by month */}
           <View style={styles.sectionCard}>
             <Text style={styles.cardTitle}>Beneficiaries Over Time</Text>
-            
-            <View style={styles.chartContainer}>
-              {/* Y-Axis scale */}
-              <View style={styles.yAxisContainer}>
-                <Text style={styles.axisText}>100k</Text>
-                <Text style={styles.axisText}>75k</Text>
-                <Text style={styles.axisText}>50k</Text>
-                <Text style={styles.axisText}>25k</Text>
-                <Text style={styles.axisText}>0k</Text>
-              </View>
-
-              {/* Line & Points Area */}
-              <View style={styles.lineAreaContainer}>
-                <View style={styles.gridLineContainer}>
-                  <View style={styles.gridLine} />
-                  <View style={styles.gridLine} />
-                  <View style={styles.gridLine} />
-                  <View style={styles.gridLine} />
-                  <View style={styles.gridLine} />
-                </View>
-
-                {/* Simulated Line Graph Overlay */}
-                <View style={styles.lineGraphOverlay}>
-                  {BENEFICIARY_POINTS.map((pt, index) => {
-                    if (index === BENEFICIARY_POINTS.length - 1) return null;
-                    return (
-                      <View
-                        key={`segment-${index}`}
-                        style={[
-                          styles.lineSegment,
-                          {
-                            left: `${(index / (BENEFICIARY_POINTS.length - 1)) * 80 + 10}%`,
-                            bottom: `${pt.val * 0.7}%`,
-                          },
-                        ]}
-                      />
-                    );
-                  })}
-                  {BENEFICIARY_POINTS.map((pt, index) => (
-                    <View
-                      key={`point-${index}`}
-                      style={[
-                        styles.chartPoint,
-                        {
-                          left: `${(index / (BENEFICIARY_POINTS.length - 1)) * 80 + 8}%`,
-                          bottom: `${(pt.val * 0.7) - 2}%`,
-                        },
-                      ]}
-                    />
-                  ))}
-                </View>
-
-                {/* X-Axis Labels */}
-                <View style={styles.xAxisContainer}>
-                  {BENEFICIARY_POINTS.map((pt) => (
-                    <Text key={pt.month} style={styles.axisText}>
-                      {pt.month}
-                    </Text>
-                  ))}
-                </View>
-              </View>
+            <Text style={styles.cardSubtitle}>People targeted by projects, running total (last 6 months)</Text>
+            <View style={styles.barsArea}>
+              {beneficiarySeries.map((pt) => {
+                const h = barAnim.interpolate({ inputRange: [0, 1], outputRange: [0, (pt.value / beneficiaryMax) * 110] });
+                return (
+                  <View key={pt.month} style={styles.barColumn}>
+                    <Text style={styles.barValue}>{compact(pt.value)}</Text>
+                    <View style={styles.barTrack}>
+                      <Animated.View style={[styles.barFill, styles.barFillEmerald, { height: h }]} />
+                    </View>
+                    <Text style={styles.barLabel}>{pt.month}</Text>
+                  </View>
+                );
+              })}
             </View>
-
-            {/* Growth Pill */}
             <View style={styles.growthBadge}>
               <Ionicons name="trending-up" size={16} color={COLORS.emerald} style={styles.growthIcon} />
               <Text style={styles.growthBadgeText}>
-                +124% beneficiary growth in 6 months
+                {growth == null
+                  ? `${compact(beneficiarySeries[beneficiarySeries.length - 1]?.value || 0)} people targeted so far`
+                  : `${growth >= 0 ? "+" : ""}${growth}% beneficiary growth in 6 months`}
               </Text>
             </View>
           </View>
 
-          {/* Section 2: Funding by Cause */}
+          {/* Section 2: Funding by Cause (share of money raised) */}
           <View style={styles.sectionCard}>
             <Text style={styles.cardTitle}>Funding by Cause</Text>
-            
-            <View style={styles.barChartContainer}>
-              <View style={styles.barYAxis}>
-                <Text style={styles.axisText}>36%</Text>
-                <Text style={styles.axisText}>27%</Text>
-                <Text style={styles.axisText}>18%</Text>
-                <Text style={styles.axisText}>9%</Text>
-                <Text style={styles.axisText}>0%</Text>
-              </View>
-
+            <Text style={styles.cardSubtitle}>Share of money raised, by project cause</Text>
+            {causeShares.length === 0 ? (
+              <Text style={styles.emptyProjectText}>No funds have been raised yet.</Text>
+            ) : (
               <View style={styles.barsArea}>
-                {FUNDING_BY_CAUSE.map((item, idx) => {
-                  const animatedHeight = barAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, item.heightPct * 110],
-                  });
-
+                {causeShares.map((item) => {
+                  const h = barAnim.interpolate({ inputRange: [0, 1], outputRange: [0, (item.percentage / causeMax) * 110] });
                   return (
-                    <View key={idx} style={styles.barColumn}>
+                    <View key={item.cause} style={styles.barColumn}>
+                      <Text style={styles.barValue}>{item.percentage}%</Text>
                       <View style={styles.barTrack}>
-                        <Animated.View
-                          style={[
-                            styles.barFill,
-                            { height: animatedHeight },
-                          ]}
-                        />
+                        <Animated.View style={[styles.barFill, { height: h }]} />
                       </View>
-                      <Text style={styles.barLabel}>{item.cause}</Text>
+                      <Text style={styles.barLabel}>{item.label}</Text>
                     </View>
                   );
                 })}
               </View>
-            </View>
+            )}
           </View>
 
           {/* Section 3: Active Project Impact */}
@@ -291,10 +298,21 @@ export default function ImpactDashboardScreen() {
               <Text style={styles.emptyProjectText}>Projects could not be loaded. Check your connection and try again.</Text>
             </View>
           ) : projects.length === 0 ? (
-            <View style={styles.projectsEmpty}>
-              <Text style={styles.emptyProjectText}>No projects have been published yet.</Text>
+            <View style={[styles.projectsEmpty, { alignItems: "center", paddingVertical: 28 }]}>
+              <Ionicons name="heart-circle-outline" size={48} color={COLORS.emerald} style={{ marginBottom: 10 }} />
+              <Text style={styles.emptyProjectHeading}>No Interested Projects Yet</Text>
+              <Text style={[styles.emptyProjectText, { textAlign: "center", marginBottom: 16 }]}>
+                Only projects from NGOs you've said "interested" to appear here. Explore partner NGOs to discover and fund their initiatives!
+              </Text>
+              <TouchableOpacity
+                style={styles.exploreButton}
+                onPress={() => navigation?.navigate?.("Matches")}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.exploreButtonText}>Browse NGO Matches</Text>
+              </TouchableOpacity>
             </View>
-          ) : projects.map((project) => {
+          ) : myProjects.map((project) => {
             const goal = Number(project.fundingGoal ?? project.goalAmount) || 0;
             const raised = Number(project.raisedAmount) || 0;
             const ratio = goal > 0 ? Math.min(raised / goal, 1) : 0;
@@ -302,7 +320,10 @@ export default function ImpactDashboardScreen() {
             const status = project.status || "Active";
             const completed = ["completed", "closed", "fully funded"].includes(String(status).toLowerCase());
             return (
-            <TouchableOpacity key={project.id} activeOpacity={0.8} style={styles.projectCard}>
+            <View
+              key={project.id}
+              style={styles.projectCard}
+            >
               <View style={styles.projectCardHeader}>
                 {project.imageUrl ? (
                   <Image source={{ uri: project.imageUrl }} style={styles.projectThumb} />
@@ -361,31 +382,48 @@ export default function ImpactDashboardScreen() {
                   {Math.round(ratio * 100)}% of R{goal.toLocaleString("en-ZA")}
                 </Text>
               </View>
-            </TouchableOpacity>
+              <View style={styles.projectActions}>
+                <TouchableOpacity
+                  style={styles.projectActionSecondary}
+                  onPress={() => navigation.navigate("ProjectProgress", { projectId: project.id })}
+                >
+                  <Text style={styles.projectActionSecondaryText}>View updates</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.projectActionPrimary}
+                  onPress={() => navigation.navigate("SponsorProposal", { projectId: project.id })}
+                >
+                  <Text style={styles.projectActionPrimaryText}>Propose support</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           );
           })}
 
-          {/* Section 4: Impact Stories */}
-          <Text style={styles.sectionHeaderTitle}>Impact Stories</Text>
-          <View style={styles.storyCard}>
-            <Image
-              source={{
-                uri: "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=800&auto=format&fit=crop",
-              }}
-              style={styles.storyImage}
-            />
-            <View style={styles.storyOverlay}>
-              <View style={styles.storyCategoryBadge}>
-                <Text style={styles.storyCategoryText}>Education</Text>
+          {/* Section 4: Impact Story, from the project reaching the most people */}
+          {story ? (
+            <>
+              <Text style={styles.sectionHeaderTitle}>Impact Stories</Text>
+              <View style={styles.storyCard}>
+                {story.imageUrl ? (
+                  <Image source={{ uri: story.imageUrl }} style={styles.storyImage} />
+                ) : (
+                  <View style={[styles.storyImage, { backgroundColor: COLORS.buttonDark }]} />
+                )}
+                <View style={styles.storyOverlay}>
+                  <View style={styles.storyCategoryBadge}>
+                    <Text style={styles.storyCategoryText}>{story.cause || story.category || "Impact"}</Text>
+                  </View>
+                  <Text style={styles.storyTitle}>
+                    {`${projectBeneficiaries(story).toLocaleString("en-ZA")} people reached by ${story.title}`}
+                  </Text>
+                  <Text style={styles.storySubText}>
+                    {`${story.orgName || story.ngoName || "Community organisation"} · ${story.location || "South Africa"}`}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.storyTitle}>
-                3,200 learners gained digital skills in 2026
-              </Text>
-              <Text style={styles.storySubText}>
-                Education For All · Johannesburg
-              </Text>
-            </View>
-          </View>
+            </>
+          ) : null}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -525,6 +563,9 @@ const styles = StyleSheet.create({
   barColumn: { alignItems: "center" },
   barTrack: { height: 110, justifyContent: "flex-end", width: 28, borderRadius: 6, backgroundColor: COLORS.background },
   barFill: { width: "100%", backgroundColor: COLORS.buttonDark, borderRadius: 6 },
+  barValue: { fontFamily: "Manrope_700Bold", fontSize: 11, color: COLORS.textPrimary, marginBottom: 6 },
+  barFillEmerald: { backgroundColor: COLORS.emerald },
+  cardSubtitle: { fontFamily: "Manrope_500Medium", fontSize: 12, color: COLORS.textSecondary, marginTop: -8, marginBottom: 16 },
   barLabel: { 
     fontFamily: "Manrope_600SemiBold",
     fontSize: 11, 
@@ -553,7 +594,10 @@ const styles = StyleSheet.create({
   projectThumb: { width: 56, height: 56, borderRadius: 12, marginRight: 16 },
   projectImageFallback: { backgroundColor: COLORS.primarySoft },
   projectsEmpty: { backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 20, marginBottom: 16 },
-  emptyProjectText: { fontFamily: "Manrope_500Medium", fontSize: 14, color: COLORS.textSecondary, textAlign: "center", lineHeight: 21 },
+  emptyProjectHeading: { fontFamily: "Manrope_700Bold", fontSize: 16, color: COLORS.textPrimary, marginBottom: 6 },
+  emptyProjectText: { fontFamily: "Manrope_500Medium", fontSize: 13, color: COLORS.textSecondary, textAlign: "center", lineHeight: 20 },
+  exploreButton: { backgroundColor: COLORS.buttonDark, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, marginTop: 4 },
+  exploreButtonText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.white },
   projectMeta: { flex: 1, justifyContent: "center" },
   projectTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   projectTitle: { 
@@ -594,6 +638,11 @@ const styles = StyleSheet.create({
   },
   progressBarFill: { height: "100%", backgroundColor: COLORS.emerald },
   progressValueRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  projectActions: { flexDirection: "row", gap: 10, marginTop: 14 },
+  projectActionPrimary: { flex: 1, minHeight: 42, borderRadius: 12, backgroundColor: COLORS.buttonDark, alignItems: "center", justifyContent: "center" },
+  projectActionPrimaryText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.white },
+  projectActionSecondary: { flex: 1, minHeight: 42, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center" },
+  projectActionSecondaryText: { fontFamily: "Manrope_700Bold", fontSize: 12, color: COLORS.buttonDark },
   raisedText: { 
     fontFamily: "Manrope_700Bold",
     fontSize: 12, 

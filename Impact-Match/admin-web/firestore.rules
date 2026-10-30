@@ -13,10 +13,77 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
     }
 
+    function ownsProject(projectData) {
+      return isSignedIn() && (
+        projectData.get("ngoOwnerId", null) == request.auth.uid ||
+        projectData.get("ownerId", null) == request.auth.uid
+      );
+    }
+
+    function projectOwner(projectData) {
+      return projectData.get("ngoOwnerId", null) != null
+        ? projectData.get("ngoOwnerId", null)
+        : projectData.get("ownerId", null);
+    }
+
+    function canReadProject(projectData) {
+      return isAdmin() || ownsProject(projectData) ||
+        projectData.get("status", "") in ["open", "active", "Active", "completed", "Completed"];
+    }
+
     // Sponsors: any signed-in user can read; only admins can change.
     match /sponsors/{sponsorId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
+    }
+
+    // Public projects can be discovered; only the project owner can edit/archive them.
+    match /projects/{projectId} {
+      allow read: if canReadProject(resource.data);
+      allow create: if isSignedIn() &&
+        (request.resource.data.get("ngoOwnerId", null) == request.auth.uid ||
+         request.resource.data.get("ownerId", null) == request.auth.uid) &&
+        request.resource.data.get("raisedAmount", 0) == 0;
+      allow update: if isAdmin() || (ownsProject(resource.data) &&
+        request.resource.data.get("ngoOwnerId", null) == resource.data.get("ngoOwnerId", null) &&
+        request.resource.data.get("ownerId", null) == resource.data.get("ownerId", null) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(["raisedAmount", "fundingRaised"]));
+      allow delete: if isAdmin();
+
+      match /updates/{updateId} {
+        function parentProject() {
+          return get(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        allow read: if canReadProject(parentProject());
+        allow create: if ownsProject(parentProject()) &&
+          request.resource.data.ownerId == request.auth.uid &&
+          request.resource.data.projectId == projectId;
+        allow update, delete: if ownsProject(parentProject()) &&
+          resource.data.ownerId == request.auth.uid;
+      }
+    }
+
+    // Payment records are written only by the PayFast Cloud Functions after
+    // the ITN has passed signature, source, server-confirmation, and amount checks.
+    match /payments/{paymentId} {
+      allow read: if isAdmin() || (isSignedIn() &&
+        (resource.data.sponsorId == request.auth.uid || resource.data.ngoId == request.auth.uid));
+      allow create, update, delete: if false;
+    }
+
+    // Sponsors create a proposal before requesting checkout. Payment status
+    // changes are server-owned and bypass these client rules via the Admin SDK.
+    match /sponsorships/{sponsorshipId} {
+      allow read: if isAdmin() || (isSignedIn() &&
+        (resource.data.sponsorId == request.auth.uid || resource.data.ngoId == request.auth.uid));
+      allow create: if isSignedIn() &&
+        request.resource.data.sponsorId == request.auth.uid &&
+        request.resource.data.status == "proposed" &&
+        request.resource.data.amount is number && request.resource.data.amount >= 5 &&
+        exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+        projectOwner(get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data) != null &&
+        projectOwner(get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data) == request.resource.data.ngoId;
+      allow update, delete: if isAdmin();
     }
 
     // Users: you can read your own document (needed for the role check),

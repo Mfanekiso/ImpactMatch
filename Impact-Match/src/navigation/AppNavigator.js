@@ -5,10 +5,12 @@ import { navigationRef } from "./navigationRef";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import * as Linking from "expo-linking";
 
 // Import all the screens that will be used in the app navigator
 import WelcomeScreen from "../screens/auth/WelcomeScreen";
 import LoginScreen from "../screens/auth/LoginScreen";
+import ForgotPasswordScreen from "../screens/auth/ForgotPasswordScreen";
 import SignUpScreen from "../screens/auth/SignUpScreen";
 import UserTypeScreen from "../screens/auth/UserTypeScreen";
 import NGOSetupScreen from "../screens/ngo/NGOSetupScreen";
@@ -29,11 +31,33 @@ import SponsorOpportunityDetailsScreen from "../screens/sponsors/SponsorOpportun
 import CreateOpportunityScreen from "../screens/ngo/CreateOpportunityScreen";
 import useUnreadMessages from "../hooks/useUnreadMessages";
 
+// New screens: sponsorship, payment and project progress
+import SponsorProposalScreen from "../screens/sponsors/SponsorProposalScreen";
+import SponsorPaymentScreen from "../screens/sponsors/SponsorPaymentScreen";
+import ProjectProgressScreen from "../screens/sponsors/ProjectProgressScreen";
+import NGOVerificationScreen from "../screens/ngo/NGOVerificationScreen";
+import PostUpdateScreen from "../screens/ngo/PostUpdateScreen";
+import NGOProjectDetailScreen from "../screens/ngo/NGOProjectDetailScreen";
+
+// Import the new Payment Verification screen
+import PaymentVerification from "../services/PaymentVerification";
+
 // Initialize Navigators
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-// ─── LUXURY COLOR PALETTE (NGO Side) ──────────────────────────────────────
+// The rest of the app hides the header. The new screens show one,
+// so the user gets a title and a back button.
+const payScreenOptions = (title) => ({
+    headerShown: true,
+    title,
+    headerStyle: { backgroundColor: "#F8F6EE" },
+    headerTintColor: "#013e37",
+    headerTitleStyle: { fontFamily: "Manrope_700Bold" },
+    headerShadowVisible: false,
+});
+
+// LUXURY COLOR PALETTE (NGO Side) 
 const COLORS = {
     background: "#FFFFFF",
     border: "#D9C982",           // Nice Solid Gold border for the nav
@@ -50,7 +74,7 @@ const TAB_ICONS = {
     Impact: ["analytics", "analytics-outline"],
 };
 
-// ─── ANIMATED TAB ICON COMPONENT ────────────────────────────────────────
+//ANIMATED TAB ICON COMPONENT 
 const AnimatedTabIcon = ({ focused, routeName }) => {
     // Subtle spring animation expanding the icon wrapper
     const scaleAnim = useRef(new Animated.Value(focused ? 1 : 0.85)).current;
@@ -141,10 +165,25 @@ function MainTabs({ route }) {
     );
 }
 
+// Configuration for deep linking
+const linking = {
+  prefixes: [Linking.createURL("/"), "impactmatch://"],
+  config: {
+    screens: {
+      PaymentVerification: "payment-verify", 
+      MainTabs: {
+        screens: {
+          Home: "home",
+        },
+      },
+    },
+  },
+};
+
 // 2. Main App Navigator
 export default function AppNavigator({ initialRouteName = "Welcome", initialRouteParams }) {
     return (
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer ref={navigationRef} linking={linking}>
             <Stack.Navigator
                 initialRouteName={initialRouteName}
                 screenOptions={{
@@ -154,6 +193,7 @@ export default function AppNavigator({ initialRouteName = "Welcome", initialRout
                 {/* Auth & Onboarding Screens (No Bottom Bar) */}
                 <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 <Stack.Screen name="Login" component={LoginScreen} />
+                <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={payScreenOptions("Reset password")} />
                 <Stack.Screen name="SignUp" component={SignUpScreen} />
                 <Stack.Screen name="UserType" component={UserTypeScreen} initialParams={initialRouteName === "UserType" ? initialRouteParams : undefined} />
                 <Stack.Screen name="NGOSetup" component={NGOSetupScreen} initialParams={initialRouteName === "NGOSetup" ? initialRouteParams : undefined} />
@@ -172,12 +212,30 @@ export default function AppNavigator({ initialRouteName = "Welcome", initialRout
                 <Stack.Screen name="NewChat" component={NewChat} />
                 <Stack.Screen name="Chat" component={ChatScreen} />
                 <Stack.Screen name="SponsorOpportunityDetails" component={SponsorOpportunityDetailsScreen} />
+
+                {/* New: sponsorship, payment and project progress screens */}
+                <Stack.Screen name="SponsorProposal" component={SponsorProposalScreen} options={payScreenOptions("Send proposal")} />
+                <Stack.Screen name="SponsorPayment" component={SponsorPaymentScreen} options={payScreenOptions("Payment")} />
+                <Stack.Screen name="ProjectProgress" component={ProjectProgressScreen} options={payScreenOptions("Project progress")} />
+                <Stack.Screen name="NGOVerification" component={NGOVerificationScreen} options={payScreenOptions("Verify organisation")} />
+                <Stack.Screen name="PostUpdate" component={PostUpdateScreen} options={payScreenOptions("Post an update")} />
+                <Stack.Screen name="NGOProjectDetail" component={NGOProjectDetailScreen} options={payScreenOptions("Project")} />
+                
+                {/* Payment Verification Modal */}
+                <Stack.Screen 
+                    name="PaymentVerification" 
+                    component={PaymentVerification} 
+                    options={{ 
+                        headerShown: false,
+                        presentation: "transparentModal",
+                        animation: "fade"
+                    }} 
+                />
             </Stack.Navigator>
         </NavigationContainer>
     );
 }
 
-// ─── STYLES ─────────────────────────────────────────────────────────────
 const tabStyles = StyleSheet.create({
     tabBar: {
         position: "absolute",
@@ -187,11 +245,11 @@ const tabStyles = StyleSheet.create({
         height: 72,
         borderRadius: 36,
         backgroundColor: COLORS.background,
-        borderWidth: 1.5, // Slightly thicker border to show off the gold
+        borderWidth: 1.5,
         borderColor: COLORS.border,
         paddingBottom: 0,
         elevation: 8,
-        shadowColor: "#D9C982", // Gold tinted shadow for extra elegance
+        shadowColor: "#D9C982",
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.15,
         shadowRadius: 16,
