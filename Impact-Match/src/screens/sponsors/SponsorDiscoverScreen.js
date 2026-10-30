@@ -25,6 +25,8 @@ import {
 import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { loadSponsorInterests, setSaved, setInterested } from "../../utils/interests";
+import { matchesQuery, searchAlgolia, orderByIds, algoliaEnabled } from "../../utils/search";
+import { ALGOLIA } from "../../config/algolia";
 import { startConversationWithNgo } from "../../utils/startConversation";
 
 // ======================================================
@@ -88,6 +90,7 @@ export default function SponsorDiscoverScreen({ navigation }) {
 
   const [activeTab, setActiveTab] = useState("Organisations");
   const [searchQuery, setSearchQuery] = useState("");
+  const [algoliaHits, setAlgoliaHits] = useState({ ngos: null, projects: null }); // ids from Algolia, or null
   const [favorites, setFavorites] = useState({});
   const [interestedIds, setInterestedIds] = useState({});
 
@@ -127,6 +130,7 @@ export default function SponsorDiscoverScreen({ navigation }) {
             verified: !!data.profileCompleted,
             location: data.location || "Location not provided",
             causes: data.targetCommunity ? [data.targetCommunity] : [],
+            sdgs: Array.isArray(data.sdgs) ? data.sdgs : [],
             description: data.mission || "No mission statement provided yet.",
             fundingNeed: data.fundingRequired ? `R${data.fundingRequired}` : "Not specified",
             bgStyle: { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] },
@@ -247,36 +251,51 @@ export default function SponsorDiscoverScreen({ navigation }) {
   // FILTERING LOGIC
   // ====================================================
 
+  // Algolia full-text search (when configured): ask Algolia 250 ms after the user stops typing
+  useEffect(() => {
+    if (!algoliaEnabled() || !searchQuery.trim()) {
+      setAlgoliaHits({ ngos: null, projects: null });
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const [ngoIds, projectIds] = await Promise.all([
+        searchAlgolia(ALGOLIA.ngoIndex, searchQuery, { filters: "role:ngo" }),
+        searchAlgolia(ALGOLIA.projectIndex, searchQuery),
+      ]);
+      if (!cancelled) setAlgoliaHits({ ngos: ngoIds, projects: projectIds });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
   const filteredOrganisations = useMemo(() => {
-    const search = searchQuery.toLowerCase().trim();
-    return ngos.filter((org) => {
-      const matchesSearch =
-        org.name.toLowerCase().includes(search) ||
-        org.description.toLowerCase().includes(search) ||
-        org.causes.some((cause) => cause.toLowerCase().includes(search));
+    const searched = algoliaHits.ngos
+      ? orderByIds(ngos, algoliaHits.ngos)
+      : ngos.filter((org) => matchesQuery(searchQuery, [org.name, org.description, org.location, org.causes, org.sdgs]));
+    return searched.filter((org) => {
       const matchesCause = !selectedCause || org.causes.some((cause) => cause.toLowerCase() === selectedCause.toLowerCase());
       const matchesLocation = !selectedLocation || org.location.toLowerCase().includes(selectedLocation.toLowerCase());
       const matchesVerified = !verifiedOnly || org.verified;
-
-      return matchesSearch && matchesCause && matchesLocation && matchesVerified;
+      return matchesCause && matchesLocation && matchesVerified;
     });
-  }, [ngos, searchQuery, selectedCause, selectedLocation, verifiedOnly]);
+  }, [ngos, searchQuery, algoliaHits, selectedCause, selectedLocation, verifiedOnly]);
 
   const filteredProjects = useMemo(() => {
-    const search = searchQuery.toLowerCase().trim();
-    return projects.filter((project) => {
-      const matchesSearch =
-        project.title.toLowerCase().includes(search) ||
-        project.description.toLowerCase().includes(search) ||
-        project.cause.toLowerCase().includes(search) ||
-        project.orgName.toLowerCase().includes(search);
+    const searched = algoliaHits.projects
+      ? orderByIds(projects, algoliaHits.projects)
+      : projects.filter((project) =>
+          matchesQuery(searchQuery, [project.title, project.description, project.cause, project.orgName, project.location])
+        );
+    return searched.filter((project) => {
       const matchesCause = !selectedCause || project.cause.toLowerCase() === selectedCause.toLowerCase();
       const matchesLocation = !selectedLocation || project.location.toLowerCase().includes(selectedLocation.toLowerCase());
       const matchesVerified = !verifiedOnly || project.verified;
-
-      return matchesSearch && matchesCause && matchesLocation && matchesVerified;
+      return matchesCause && matchesLocation && matchesVerified;
     });
-  }, [projects, searchQuery, selectedCause, selectedLocation, verifiedOnly]);
+  }, [projects, searchQuery, algoliaHits, selectedCause, selectedLocation, verifiedOnly]);
 
   if (!fontsLoaded) return null;
 
