@@ -1,39 +1,24 @@
 {
   "expo": {
-    "name": "Impact-Match",
-    "slug": "Impact-Match",
+    "name": "ImpactMatch",
+    "slug": "ImpactMatch",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/splash.jpeg",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.jpeg",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F6EE"
+    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/splash.jpeg",
+        "backgroundColor": "#F8F6EE"
       }
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-status-bar",
-      "expo-asset",
-      "expo-font",
-      [
-        "expo-notifications",
-        {
-          "color": "#10B981"
-        }
-      ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "4aaace7d-fe83-41db-908c-ef9278a47477"
-      }
-    },
-    "owner": "ta_dini"
+    }
   }
 }
