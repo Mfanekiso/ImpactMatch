@@ -92,6 +92,7 @@ export default function ImpactDashboardScreen({ navigation }) {
   const [projectsLoading, setProjectsLoading] = React.useState(true);
   const [projectsError, setProjectsError] = React.useState(false);
   const [interests, setInterests] = React.useState([]);
+  const [projectFunding, setProjectFunding] = React.useState({});
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -153,7 +154,48 @@ export default function ImpactDashboardScreen({ navigation }) {
   }, []);
 
   const scoped = React.useMemo(() => selectPartnerProjects(projects, interests), [projects, interests]);
-  const myProjects = scoped.projects;
+  // Match the NGO dashboard: derive raised totals from confirmed sponsorships
+  // and listen live so a PayFast confirmation updates the sponsor's figures.
+  useEffect(() => {
+    if (projects.length === 0) {
+      setProjectFunding({});
+      return undefined;
+    }
+
+    let active = true;
+    const unsubscribers = projects.map((project) => onSnapshot(
+      query(collection(db, "sponsorships"), where("projectId", "==", project.id)),
+      (snapshot) => {
+        if (!active) return;
+        const paidSponsorships = snapshot.docs
+          .map((sponsorshipDoc) => sponsorshipDoc.data())
+          .filter((sponsorship) =>
+            ["paid", "complete", "completed", "active"].includes(
+              String(sponsorship.paymentStatus || sponsorship.status || "").toLowerCase()
+            ) || !!sponsorship.paidAt || !!sponsorship.transactionReference
+          );
+        const raised = paidSponsorships.reduce((sum, sponsorship) => sum + (Number(sponsorship.amount) || 0), 0);
+        setProjectFunding((previous) => ({
+          ...previous,
+          [project.id]: {
+            raised,
+            sponsorCount: new Set(paidSponsorships.map((sponsorship) => sponsorship.sponsorId).filter(Boolean)).size,
+          },
+        }));
+      },
+      (error) => console.warn("Could not load sponsor project funding:", error?.message)
+    ));
+
+    return () => {
+      active = false;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [projects]);
+
+  const myProjects = React.useMemo(() => scoped.projects.map((project) => ({
+    ...project,
+    raisedAmount: Math.max(Number(project.raisedAmount) || 0, projectFunding[project.id]?.raised || 0),
+  })), [scoped.projects, projectFunding]);
   const beneficiarySeries = React.useMemo(() => beneficiariesByMonth(myProjects, 6), [myProjects]);
   const beneficiaryMax = Math.max(1, ...beneficiarySeries.map((p) => p.value));
   const growth = growthPercent(beneficiarySeries);

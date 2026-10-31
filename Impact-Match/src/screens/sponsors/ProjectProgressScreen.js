@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -323,6 +324,7 @@ export default function ProjectProgressScreen({ navigation, route }) {
           updates.map((item, index) => {
             const isLatest = index === 0;
             const timeLabel = isToday(item.createdAt) ? "Today" : relativeDate(item.createdAt);
+            const attachments = Array.isArray(item.media) ? item.media : (Array.isArray(item.mediaUrls) ? item.mediaUrls : []);
             return (
               <View
                 key={item.id}
@@ -341,6 +343,16 @@ export default function ProjectProgressScreen({ navigation, route }) {
                 </View>
 
                 <Text style={styles.updateBody}>{item.text || ""}</Text>
+
+                {attachments.length > 0 && (
+                  <View style={styles.updateMediaRow}>
+                    {attachments.map((attachment, mediaIndex) => {
+                      const uri = typeof attachment === "string" ? attachment : attachment.url;
+                      if (!uri) return null;
+                      return <Image key={`${item.id}-media-${mediaIndex}`} source={{ uri }} style={styles.updateMedia} />;
+                    })}
+                  </View>
+                )}
 
                 {(item.progress != null || item.beneficiaries != null) && (
                   <View style={styles.metricRow}>
@@ -455,6 +467,8 @@ const styles = StyleSheet.create({
   updateSubLabel: { fontFamily: "Manrope_500Medium", fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   dateLabel: { fontFamily: "Manrope_500Medium", fontSize: 12, color: COLORS.textSecondary },
   updateBody: { fontFamily: "Manrope_500Medium", fontSize: 14, lineHeight: 20, color: COLORS.textPrimary, marginTop: 8 },
+  updateMediaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  updateMedia: { width: 88, height: 72, borderRadius: 10, backgroundColor: COLORS.primarySoft },
   metricRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   metricBadge: { backgroundColor: COLORS.emeraldSoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   metricBadgeText: { fontFamily: "Manrope_700Bold", fontSize: 11, color: COLORS.emerald },

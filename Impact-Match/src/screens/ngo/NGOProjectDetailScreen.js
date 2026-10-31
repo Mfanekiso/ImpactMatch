@@ -591,13 +591,13 @@ export default function NGOProjectDetailScreen({ navigation, route }) {
                 </View>
               </View>
 
-              <Text style={styles.inputLabel}>What happened *</Text>
+              <Text style={styles.inputLabel}>What did you add, and what does it do? *</Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
                 value={updateText}
                 onChangeText={setUpdateText}
                 multiline
-                placeholder="Describe the progress and any challenges"
+                placeholder="Describe what was added, how it works, and the progress made"
                 placeholderTextColor={COLORS.textSecondary}
                 editable={!saving}
               />

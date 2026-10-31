@@ -563,7 +563,7 @@ export default function NgoImpactScreen({ navigation }) {
                                     <View style={styles.projectActions}>
                                         <TouchableOpacity
                                             style={styles.projectActionButton}
-                                            onPress={() => handleOpenEditModal(project)}
+                                            onPress={() => navigation.navigate("NGOUpdate", { projectId: project.id })}
                                             accessibilityRole="button"
                                             accessibilityLabel={`Update ${project.title || "project"}`}
                                         >

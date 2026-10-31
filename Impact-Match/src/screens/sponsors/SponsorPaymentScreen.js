@@ -6,6 +6,12 @@ import { COLORS, NEUTRAL } from "../../components/PayUI";
 import { buildPayFastCheckoutUrl, PAYFAST_CONFIG } from "../../services/paymentApi";
 
 const PLATFORM_FEE_RATE = 0.03;
+const isPaymentConfirmed = (record) => {
+  if (!record) return false;
+  const statuses = [record.paymentStatus, record.status].map((value) => String(value || "").toLowerCase());
+  return statuses.some((status) => ["paid", "complete", "completed", "active"].includes(status)) ||
+    !!record.paidAt || !!record.transactionReference;
+};
 const formatRand = (cents) => {
   const value = Number(cents) || 0;
   const fractionDigits = value % 100 === 0 ? 0 : 2;
@@ -35,15 +41,21 @@ export default function SponsorPaymentScreen({ route, navigation }) {
     if (!sponsorshipId || !auth.currentUser) return undefined;
     const unsubPayment = onSnapshot(doc(db, "payments", sponsorshipId), (snapshot) => {
       if (snapshot.exists()) {
-        setPayment(snapshot.data());
+        const paymentData = snapshot.data();
+        setPayment((previous) => ({ ...previous, ...paymentData }));
       }
     }, (error) => {
       console.warn("Could not listen for payment status:", error?.message);
     });
 
     const unsubSponsorship = onSnapshot(doc(db, "sponsorships", sponsorshipId), (snapshot) => {
-      if (snapshot.exists() && snapshot.data().status === "active") {
-        setPayment((prev) => prev ? { ...prev, status: "complete" } : { status: "complete" });
+      if (snapshot.exists()) {
+        const sponsorship = snapshot.data();
+        setPayment((previous) => ({
+          ...previous,
+          ...sponsorship,
+          status: isPaymentConfirmed(sponsorship) ? "complete" : (previous?.status || sponsorship.status),
+        }));
       }
     });
 
@@ -62,7 +74,7 @@ const handlePayFastApiCheckout = async () => {
       Alert.alert("Payment unavailable", "A proposal of at least R5.00 is required to process payment.");
       return;
     }
-    if (payment?.status === "complete") {
+    if (isPaymentConfirmed(payment)) {
       Alert.alert("Already Paid", "This sponsorship payment has already been completed.");
       return;
     }
@@ -97,7 +109,7 @@ const handlePayFastApiCheckout = async () => {
     }
   };
 
-  const paid = payment?.status === "complete";
+  const paid = isPaymentConfirmed(payment);
 
   const statusMessage = paid
     ? "PayFast API confirmed this payment. Your sponsorship is now active and funds have been credited to the NGO project."
