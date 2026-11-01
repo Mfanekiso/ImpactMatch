@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     View,
     Text,
@@ -7,11 +7,31 @@ import {
     StyleSheet,
 } from "react-native";
 
-import sponsors from "../../data/sponsors";
 import SponsorCard from "../../components/SponsorCard";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../../../Backend/firebaseConfig";
 
 export default function SponsorSearchScreen({ navigation }) {
     const [search, setSearch] = useState("");
+    const [sponsors, setSponsors] = useState([]);
+
+    useEffect(() => onSnapshot(
+        query(collection(db, "users"), where("role", "==", "sponsor")),
+        (snapshot) => setSponsors(snapshot.docs.map((entry) => {
+            const data = entry.data();
+            return {
+                id: entry.id,
+                ...data,
+                name: data.organisationName || data.companyName || data.name || "Sponsor",
+                type: data.industry || data.sponsorType || "Sponsor",
+                location: data.location || "Location not provided",
+                causes: Array.isArray(data.preferredCauses) ? data.preferredCauses : (Array.isArray(data.causes) ? data.causes : []),
+                profileImageUrl: data.profileImageUrl || data.photoURL || data.logoUrl || null,
+                description: data.mission || data.description || "",
+                budget: data.fundingBudget ? `R${Number(data.fundingBudget).toLocaleString("en-ZA")}` : "Not disclosed",
+            };
+        }))
+    ), []);
 
     const filteredSponsors = sponsors.filter((sponsor) => {
         const searchText = search.toLowerCase();

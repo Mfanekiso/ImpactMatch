@@ -24,9 +24,8 @@ import {
     Manrope_700Bold,
 } from "@expo-google-fonts/manrope";
 
-// Firebase imports
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+// Firebase imports (Removed firebase/storage)
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import {
     EmailAuthProvider,
     reauthenticateWithCredential,
@@ -38,6 +37,52 @@ import { auth, db } from "../../../Backend/firebaseConfig";
 import { removePushTokenForUser } from "../../utils/pushNotifications";
 import { cacheProfile } from "../../utils/profileCache";
 import { withCoordinates } from "../../utils/geocode";
+
+// ─── CLOUDINARY CONFIGURATION ───────────────────────────────────────────
+const CLOUDINARY_CLOUD_NAME = "dtpp6ojbl";
+const CLOUDINARY_UPLOAD_PRESET = "impactmatch_updates";
+
+const uploadNGOImageToCloudinary = async (asset, uid) => {
+    const fileName = asset.fileName || `ngo_avatar_${uid}_${Date.now()}.jpg`;
+    const mimeType = asset.mimeType || "image/jpeg";
+
+    const formData = new FormData();
+
+    // Handle BOTH Web (localhost) and Mobile (Expo Go)
+    if (Platform.OS === "web") {
+        const fileResponse = await fetch(asset.uri);
+        const blob = await fileResponse.blob();
+        formData.append("file", blob, fileName);
+    } else {
+        formData.append("file", {
+            uri: asset.uri,
+            type: mimeType,
+            name: fileName,
+        });
+    }
+
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    formData.append("folder", "impactmatch/ngo_profiles");
+
+    const endpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.secure_url) {
+        throw new Error(data.error?.message || "Failed to upload image to Cloudinary.");
+    }
+
+    // Deliver auto-compressed 400x400 square avatar
+    return data.secure_url.replace(
+        "/upload/",
+        "/upload/f_auto,q_auto,w_400,h_400,c_fill/"
+    );
+};
 
 // ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
 const COLORS = {
@@ -114,6 +159,8 @@ export default function NGOProfileScreen({ navigation }) {
     }, [uid]);
 
     const handlePickImage = async () => {
+        if (!uid) return;
+
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
             Alert.alert("Permission Needed", "Allow photo access to upload a profile image.");
@@ -121,34 +168,38 @@ export default function NGOProfileScreen({ navigation }) {
         }
 
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ["images"],
             allowsEditing: true,
             aspect: [1, 1],
-            quality: 0.7,
+            quality: 0.8,
         });
 
-        if (result.canceled) return;
+        if (result.canceled || !result.assets?.length) return;
 
         try {
             setUploading(true);
-            const uri = result.assets[0].uri;
+            const asset = result.assets[0];
 
-            const response = await fetch(uri);
-            const blob = await response.blob();
+            // 1. Upload image to Cloudinary
+            const cloudinaryUrl = await uploadNGOImageToCloudinary(asset, uid);
 
-            const storage = getStorage();
-            const imageRef = ref(storage, `profileImages/${uid}`);
-            await uploadBytes(imageRef, blob);
+            const imagePayload = {
+                profileImageUrl: cloudinaryUrl,
+                photoURL: cloudinaryUrl,
+                logoUrl: cloudinaryUrl,
+            };
 
-            const downloadUrl = await getDownloadURL(imageRef);
+            // 2. Save Cloudinary URL to Firestore `users/{uid}`
+            await updateDoc(doc(db, "users", uid), imagePayload);
 
-            await updateDoc(doc(db, "users", uid), {
-                profileImageUrl: downloadUrl,
-            });
+            // 3. Sync with `publicProfiles/{uid}` so Sponsors see the NGO logo
+            await setDoc(doc(db, "publicProfiles", uid), imagePayload, { merge: true });
 
-            setProfile((prev) => ({ ...prev, profileImageUrl: downloadUrl }));
+            const nextProfile = { ...profile, ...imagePayload };
+            setProfile(nextProfile);
+            await cacheProfile(uid, nextProfile);
         } catch (error) {
-            Alert.alert("Upload Failed", error.message);
+            Alert.alert("Upload Failed", error?.message || "Could not upload profile photo.");
         } finally {
             setUploading(false);
         }
@@ -215,6 +266,8 @@ export default function NGOProfileScreen({ navigation }) {
             }
             const located = await withCoordinates(updated);
             await updateDoc(doc(db, "users", user.uid), located);
+            await setDoc(doc(db, "publicProfiles", user.uid), located, { merge: true });
+
             const nextProfile = { ...profile, ...located };
             setProfile(nextProfile);
             await cacheProfile(user.uid, nextProfile);
@@ -353,8 +406,10 @@ export default function NGOProfileScreen({ navigation }) {
                         </View>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.editButton} onPress={handlePickImage}>
-                        <Text style={styles.editButtonText}>{profileImageUrl ? "Change Photo" : "Add Photo"}</Text>
+                    <TouchableOpacity style={styles.editButton} onPress={handlePickImage} disabled={uploading}>
+                        <Text style={styles.editButtonText}>
+                            {uploading ? "Uploading..." : profileImageUrl ? "Change Photo" : "Add Photo"}
+                        </Text>
                     </TouchableOpacity>
                 </View>
 

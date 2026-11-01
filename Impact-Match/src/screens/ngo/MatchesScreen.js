@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
     ActivityIndicator,
+    Image,
     StatusBar,
     StyleSheet,
     Text,
@@ -46,6 +47,7 @@ export default function MatchesScreen({ navigation }) {
                     const interest = interestBySponsor[entry.id] || {};
                     return {
                         id: entry.id,
+                        profileImageUrl: sponsor.profileImageUrl || sponsor.photoURL || sponsor.logoUrl || null,
                         name: sponsor.organisationName || "Sponsor",
                         industry: sponsor.industry || "Sponsor",
                         location: sponsor.location || "Location not provided",
@@ -81,6 +83,7 @@ export default function MatchesScreen({ navigation }) {
 
     const renderMatch = ({ item }) => (
         <TouchableOpacity style={styles.card} activeOpacity={0.82} onPress={() => navigation.navigate("SponsorDetails", { sponsor: { ...item, type: item.industry, matchPercentage: item.matchScore, tags: item.causes, description: "", budget: item.budget ? `R${Number(item.budget).toLocaleString("en-ZA")}` : "Not disclosed" }, ngoId: auth.currentUser?.uid })}>
+            {item.profileImageUrl ? <Image source={{ uri: item.profileImageUrl }} style={styles.avatar} /> : null}
             <View style={styles.score}><Text style={styles.scoreText}>{item.matchScore}%</Text></View>
             <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
@@ -119,6 +122,7 @@ const styles = StyleSheet.create({
     list: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 130 },
     card: { flexDirection: "row", alignItems: "center", padding: 15, backgroundColor: COLORS.surface, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, marginBottom: 12 },
     score: { width: 54, height: 54, borderRadius: 27, backgroundColor: "#E8F5EE", justifyContent: "center", alignItems: "center", marginRight: 13 },
+    avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 10, backgroundColor: "#E8F5EE" },
     scoreText: { color: COLORS.primary, fontWeight: "800", fontSize: 14 },
     info: { flex: 1, marginRight: 8 }, name: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
     meta: { color: COLORS.muted, fontSize: 12, marginTop: 4 }, tags: { color: COLORS.muted, fontSize: 11, marginTop: 5 },

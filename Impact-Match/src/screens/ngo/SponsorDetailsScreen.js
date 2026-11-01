@@ -8,6 +8,7 @@ import {
     StyleSheet,
     Alert,
     StatusBar,
+    Image,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { auth } from "../../../Backend/firebaseConfig";
@@ -112,9 +113,11 @@ export default function SponsorDetailsScreen({ route, navigation }) {
                 {/* ─── Hero Section ─── */}
                 <View style={styles.heroSection}>
                     <View style={styles.heroHeader}>
-                        <View style={styles.avatarPlaceholder}>
-                            <Ionicons name="business" size={32} color={COLORS.primary} />
-                        </View>
+                        {sponsor.profileImageUrl || sponsor.photoURL || sponsor.logoUrl ? (
+                            <Image source={{ uri: sponsor.profileImageUrl || sponsor.photoURL || sponsor.logoUrl }} style={styles.avatarPlaceholder} />
+                        ) : (
+                            <View style={styles.avatarPlaceholder}><Ionicons name="business" size={32} color={COLORS.primary} /></View>
+                        )}
                         <View style={styles.typeBadge}>
                             <Text style={styles.typeText}>{sponsor.type || "General"}</Text>
                         </View>

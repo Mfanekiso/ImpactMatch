@@ -4,6 +4,7 @@ import {
     Text,
     TouchableOpacity,
     StyleSheet,
+    Image,
 } from "react-native";
 
 export default function SponsorCard({ sponsor, onPress }) {
@@ -13,6 +14,7 @@ export default function SponsorCard({ sponsor, onPress }) {
             onPress={onPress}
         >
             <View style={styles.topRow}>
+                {sponsor.profileImageUrl ? <Image source={{ uri: sponsor.profileImageUrl }} style={styles.avatar} /> : null}
                 <View style={styles.info}>
                     <Text style={styles.name}>
                         {sponsor.name}
@@ -57,8 +59,11 @@ const styles = StyleSheet.create({
 
     topRow: {
         flexDirection: "row",
+        alignItems: "center",
         justifyContent: "space-between",
     },
+
+    avatar: { width: 52, height: 52, borderRadius: 26, marginRight: 12, backgroundColor: "#E8F1FC" },
 
     info: {
         flex: 1,

@@ -134,7 +134,7 @@ export default function SponsorDiscoverScreen({ navigation }) {
             description: data.mission || "No mission statement provided yet.",
             fundingNeed: data.fundingRequired ? `R${data.fundingRequired}` : "Not specified",
             bgStyle: { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] },
-            profileImageUrl: data.profileImageUrl || null,
+            profileImageUrl: data.profileImageUrl || data.photoURL || data.logoUrl || null,
             email: data.email || "Not provided",
             about: data.mission || "No further details provided yet.",
           };

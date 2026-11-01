@@ -110,6 +110,7 @@ export default function NGOUpdateScreen({ navigation, route }) {
   const [project, setProject] = useState(null);
   const [sponsorships, setSponsorships] = useState([]);
   const [sponsorNames, setSponsorNames] = useState({});
+  const [sponsorImages, setSponsorImages] = useState({});
   const [description, setDescription] = useState("");
   const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -203,6 +204,8 @@ export default function NGOUpdateScreen({ navigation, route }) {
             data.displayName ||
             "Anonymous sponsor";
           setSponsorNames((previous) => ({ ...previous, [sponsorId]: name }));
+          const imageUrl = data.profileImageUrl || data.photoURL || data.logoUrl || null;
+          if (imageUrl) setSponsorImages((previous) => ({ ...previous, [sponsorId]: imageUrl }));
         })
         .catch(() =>
           setSponsorNames((previous) => ({ ...previous, [sponsorId]: "Anonymous sponsor" }))
@@ -363,11 +366,13 @@ export default function NGOUpdateScreen({ navigation, route }) {
                 "collaborator";
               return (
                 <View key={sponsorship.id} style={styles.sponsorRow}>
-                  <View style={[styles.avatar, collaborator && { backgroundColor: C.gold }]}>
-                    <Text style={styles.avatarText}>
-                      {name.trim().charAt(0).toUpperCase() || "?"}
-                    </Text>
-                  </View>
+                  {sponsorImages[sponsorship.sponsorId] ? (
+                    <Image source={{ uri: sponsorImages[sponsorship.sponsorId] }} style={styles.avatar} />
+                  ) : (
+                    <View style={[styles.avatar, collaborator && { backgroundColor: C.gold }]}>
+                      <Text style={styles.avatarText}>{name.trim().charAt(0).toUpperCase() || "?"}</Text>
+                    </View>
+                  )}
                   <Text style={styles.sponsorName} numberOfLines={1}>
                     {name}
                   </Text>
