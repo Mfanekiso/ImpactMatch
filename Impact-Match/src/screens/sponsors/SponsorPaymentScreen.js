@@ -94,11 +94,16 @@ export default function SponsorPaymentScreen({ route, navigation }) {
       return;
     }
 
+    // Shows the spinner in the button and the "You will be taken to PayFast..." message
     setProcessingPayment(true);
     setCheckoutError("");
 
     try {
       const payfastUrl = buildPayFastUrl({ sponsorshipId, totalCents, title });
+
+      // Short pause so the user can see the spinner and the message before leaving the screen
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
       if (Platform.OS === "web" && typeof window !== "undefined") {
         // Same tab on web, so PayFast can send the user back to this app
         window.location.assign(payfastUrl);
@@ -127,13 +132,16 @@ export default function SponsorPaymentScreen({ route, navigation }) {
   const paid = isPaymentConfirmed(payment);
   const paymentFailed = !paid && ["failed", "cancelled", "canceled"].includes(String(payment?.paymentStatus || payment?.status || "").toLowerCase());
 
+  // Empty before the user presses Pay. The PayFast message only appears once Pay is clicked.
   const statusMessage = paid
     ? "Your payment was received. Your sponsorship is now active and the funds have been credited to the NGO project."
-    : paymentFailed
+    : paymentFailed && !processingPayment
       ? "The payment was not completed. You can try again when you are ready."
-      : checkoutOpened
-        ? "The payment page has opened. Complete the payment there and you will be brought back here."
-        : "You will be taken to the PayFast sandbox (test mode) to complete the payment, then returned to the app.";
+      : processingPayment
+        ? "You will be taken to the PayFast sandbox (test mode) to complete the payment, then returned to the app."
+        : checkoutOpened
+          ? "The payment page has opened. Complete the payment there and you will be brought back here."
+          : "";
 
   return (
     <View style={styles.screen}>
@@ -174,13 +182,13 @@ export default function SponsorPaymentScreen({ route, navigation }) {
         <View style={styles.methodCard}>
           <View style={styles.methodLogo}><Text style={styles.methodLogoText}>PF</Text></View>
           <View style={styles.methodCopy}>
-            <Text style={styles.methodTitle}>PayFast (sandbox)</Text>
-            <Text style={styles.methodDescription}>Test payment with fake money</Text>
+            <Text style={styles.methodTitle}>Pay With PayFast </Text>
+            <Text style={styles.methodDescription}>pay with our secure payment gateaway</Text>
           </View>
           <View style={styles.selectedMark}><Text style={styles.selectedMarkText}>✓</Text></View>
         </View>
 
-        <Text style={styles.statusText}>{statusMessage}</Text>
+        {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
         {checkoutError || paymentFailed ? <Text style={styles.errorText}>{checkoutError || "Payment was unsuccessful or cancelled."}</Text> : null}
       </ScrollView>
 

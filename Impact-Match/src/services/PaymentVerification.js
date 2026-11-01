@@ -28,7 +28,7 @@ export default function PaymentVerification({ route, navigation }) {
     let returnTimer;
     let finished = false;
     let started = false;
-    let unsubscribeSnapshot = () => { };
+    let unsubscribeSnapshot = () => {};
     const finish = (nextStatus) => {
       if (finished) return;
       finished = true;
@@ -101,7 +101,7 @@ export default function PaymentVerification({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-
+        
         {status === "processing" && (
           <View style={styles.content}>
             <View style={[styles.iconContainer, styles.processingIconBg]}>
@@ -119,13 +119,7 @@ export default function PaymentVerification({ route, navigation }) {
               <Ionicons name="checkmark-circle" size={48} color="#16A34A" />
             </View>
             <Text style={styles.title}>Payment Successful!</Text>
-            <Text style={styles.subtitle}>Thank you! Your sponsorship has been securely recorded.</Text>
-            <Pressable
-              style={[styles.button, styles.successButton]}
-              onPress={returnToApp}
-            >
-              <Text style={styles.buttonText}>View Impact Dashboard</Text>
-            </Pressable>
+            <Text style={styles.subtitle}>Thank you! Your sponsorship has been securely recorded. Taking you back to your dashboard...</Text>
           </View>
         )}
 
@@ -136,9 +130,9 @@ export default function PaymentVerification({ route, navigation }) {
             </View>
             <Text style={styles.title}>Payment Unsuccessful</Text>
             <Text style={styles.subtitle}>PayFast did not confirm this payment. You can return to your payment page and try again.</Text>
-            <Pressable
-              style={[styles.button, styles.errorButton]}
-              onPress={returnToApp}
+            <Pressable 
+              style={[styles.button, styles.errorButton]} 
+              onPress={returnToApp} 
             >
               <Text style={[styles.buttonText, { color: "#374151" }]}>Return Home</Text>
             </Pressable>
