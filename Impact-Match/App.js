@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
+import * as SplashScreen from "expo-splash-screen";
 import {
     ActivityIndicator,
     Animated,
@@ -18,9 +19,16 @@ import { cacheProfile, readCachedProfile } from "./src/utils/profileCache";
 import { flushOfflineWrites } from "./src/utils/offlineWrites";
 import { registerAndSavePushToken, listenForNotificationTaps } from "./src/utils/pushNotifications";
 
+// Keep the configured logo splash visible while the initial auth/profile check runs.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
     const [boot, setBoot] = useState(null);
     const [offline, setOffline] = useState(false);
+
+    useEffect(() => {
+        if (boot) SplashScreen.hideAsync();
+    }, [boot]);
 
     useEffect(() => {
         const unsubscribeNetwork = NetInfo.addEventListener((state) => {

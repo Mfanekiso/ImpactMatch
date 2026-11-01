@@ -78,7 +78,7 @@ export default function SponsorProposalScreen({ route, navigation }) {
         message: message.trim(),
         // A proposal is not a completed payment. The payment confirmation flow
         // updates this record after PayFast verifies that the money was sent.
-        status: "pending",
+        status: "complete",
         createdAt: serverTimestamp(),
       });
       navigation.navigate("SponsorPayment", {
