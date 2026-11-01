@@ -11,9 +11,9 @@ export const PAYFAST_CONFIG = {
   merchantKey: "q1cd2rdny4a53",
   passphrase: "payfast",
   processUrl: "https://sandbox.payfast.co.za/eng/process",
-  // The app watches for these addresses inside the WebView.
-  returnUrl: "http://localhost:8081/payment-verify?payment=complete",
-  cancelUrl: "http://localhost:8081/payment-verify?payment=cancelled",
+  // Public HTTPS bridge returns the browser to the app's registered deep link.
+  returnUrl: "https://us-central1-semester-2-project-c6235.cloudfunctions.net/payFastReturn",
+  cancelUrl: "https://us-central1-semester-2-project-c6235.cloudfunctions.net/payFastReturn",
   
   notifyUrl: "https://us-central1-semester-2-project-c6235.cloudfunctions.net/payfastNotify",
   platformFeeRate: 0.03, // 3%
@@ -67,8 +67,8 @@ export function buildPayFastCheckoutUrl({ sponsorshipId, amount, projectTitle, s
   const paymentData = {
     merchant_id: PAYFAST_CONFIG.merchantId,
     merchant_key: PAYFAST_CONFIG.merchantKey,
-    return_url: `${PAYFAST_CONFIG.returnUrl}&id=${sponsorshipId}`,
-    cancel_url: `${PAYFAST_CONFIG.cancelUrl}&id=${sponsorshipId}`,
+    return_url: `${PAYFAST_CONFIG.returnUrl}?paymentId=${encodeURIComponent(sponsorshipId)}&result=return`,
+    cancel_url: `${PAYFAST_CONFIG.cancelUrl}?paymentId=${encodeURIComponent(sponsorshipId)}&result=cancel`,
     notify_url: PAYFAST_CONFIG.notifyUrl,
     name_first: cleanText(sponsorName, 100, "Sponsor"),
     email_address: String(sponsorEmail || "sponsor@impactmatch.org").trim(),
@@ -111,7 +111,7 @@ export function buildPayFastCheckoutUrl({ sponsorshipId, amount, projectTitle, s
 
 export function getPaymentResultFromUrl(url) {
   
-  if (!url || !url.startsWith("http://localhost:8081/payment-verify")) {
+  if (!url || !url.startsWith("impactmatch://payment-verify")) {
     return null;
   }
   if (url.includes("payment=complete")) return "complete";

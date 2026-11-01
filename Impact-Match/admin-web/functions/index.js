@@ -211,12 +211,20 @@ exports.payFastCheckout = onRequest({
 exports.payFastReturn = onRequest({ region: REGION }, (request, response) => {
   const paymentId = String(request.query.paymentId || "");
   const cancelled = request.query.result === "cancel";
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(paymentId)) {
+    response.status(400).send("Invalid payment reference.");
+    return;
+  }
+
+  const payment = cancelled ? "cancelled" : "complete";
+  const appUrl = `impactmatch://payment-verify?payment=${payment}&id=${encodeURIComponent(paymentId)}`;
+  const title = cancelled ? "Checkout cancelled" : "Payment submitted";
+  const message = cancelled
+    ? "You cancelled the PayFast checkout. Returning to Impact Match."
+    : "PayFast has returned you to Impact Match. The app is checking the secure payment confirmation.";
+  const safeAppUrl = escapeHtml(appUrl);
   response.status(200).set("Content-Type", "text/html; charset=utf-8").send(
-    toPaymentPage(
-      cancelled ? "Checkout cancelled" : "Payment submitted",
-      cancelled ? "You cancelled the PayFast checkout. No payment is recorded as complete." : "PayFast has returned you to Impact Match. The app is waiting for the secure payment notification.",
-      paymentId
-    )
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${safeAppUrl}"><title>${escapeHtml(title)}</title><style>body{font-family:system-ui,sans-serif;background:#f3f6f5;color:#433327;margin:0;padding:32px 20px}.card{max-width:440px;margin:8vh auto;background:#fff;border:1px solid #e8dfd5;border-radius:18px;padding:24px;box-sizing:border-box}h1{font-size:20px;margin:0 0 12px}p{font-size:15px;line-height:1.5;color:#6f5f52}a{display:inline-block;margin-top:8px;background:#087456;color:#fff;padding:12px 16px;border-radius:10px;text-decoration:none}</style></head><body><main class="card"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p><a href="${safeAppUrl}">Return to Impact Match</a></main><script>window.location.replace(${JSON.stringify(appUrl)});</script></body></html>`
   );
 });
 

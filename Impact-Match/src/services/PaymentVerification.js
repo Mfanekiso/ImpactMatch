@@ -29,7 +29,7 @@ export default function PaymentVerification({ route, navigation }) {
       finished = true;
       clearTimeout(timeout);
       setStatus(nextStatus);
-      returnTimer = setTimeout(returnToApp, 1400);
+      if (nextStatus === "pending") returnTimer = setTimeout(returnToApp, 1400);
     };
 
     if (paymentState === "cancelled") {
