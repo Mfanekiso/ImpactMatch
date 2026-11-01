@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 const crypto = require("crypto");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -11,7 +10,7 @@ const { REGION, MODEL, CAUSE_OPTIONS, DAILY_LIMITS } = require("./config");
 const { askStructured } = require("./lib/ai");
 const { requireAuth, checkQuota, clean } = require("./lib/guard");
 const { LANGUAGES, transcribe, translateToEnglish } = require("./lib/vulavula");
-const { scanSignals } = require("./lib/fraudSignals");
+const { scanSignals } = require("./lib/fraudsignals");
 
 initializeApp();
 
@@ -351,100 +350,182 @@ exports.reviewProfile = onDocumentWritten(
     }
   }
 );
-=======
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-const axios = require("axios");
 
-admin.initializeApp();
-const db = admin.firestore();
+/* -------------------------------------------------------------------------- */
+/* 5. PAYFAST CHECKOUT AND PAYMENT CONFIRMATION                               */
+/* -------------------------------------------------------------------------- */
 
-exports.payfastNotify = functions.https.onRequest(async (req, res) => {
-  // PayFast sends data as a POST application/x-www-form-urlencoded
-  const payload = req.body;
-  
-  // 1. Verify the ITN is genuinely from PayFast
-  try {
-    const pfParamString = new URLSearchParams(payload).toString();
-    const response = await axios.post(
-      "https://sandbox.payfast.co.za/eng/query/validate", 
-      pfParamString, 
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-    );
-    
-    if (response.data !== "VALID") {
-      console.error("PayFast ITN Validation failed");
-      return res.status(400).send("Invalid Request");
+const { onRequest } = require("firebase-functions/v2/https");
+const PAYMENT_REGION = "us-central1";
+const PAYFAST_MERCHANT_ID = defineSecret("PAYFAST_MERCHANT_ID");
+const PAYFAST_MERCHANT_KEY = defineSecret("PAYFAST_MERCHANT_KEY");
+const PAYFAST_PASSPHRASE = defineSecret("PAYFAST_PASSPHRASE");
+const PAYMENT_RETURN_BASE = "https://us-central1-semester-2-project-c6235.cloudfunctions.net/payfastReturn";
+const PAYFAST_SANDBOX = true;
+const PAYFAST_HOST = PAYFAST_SANDBOX ? "sandbox.payfast.co.za" : "www.payfast.co.za";
+
+function payfastEncode(value) {
+  return encodeURIComponent(String(value).trim())
+    .replace(/!/g, "%21").replace(/'/g, "%27").replace(/\(/g, "%28")
+    .replace(/\)/g, "%29").replace(/\*/g, "%2A").replace(/%20/g, "+");
+}
+
+function checkoutSignature(fields, passphrase) {
+  const encoded = Object.entries(fields).filter(([, value]) => value !== "")
+    .map(([key, value]) => `${key}=${payfastEncode(value)}`).join("&");
+  const signed = passphrase ? `${encoded}&passphrase=${payfastEncode(passphrase)}` : encoded;
+  return { encoded, signature: crypto.createHash("md5").update(signed).digest("hex") };
+}
+
+exports.createPayFastCheckout = onCall(
+  { region: PAYMENT_REGION, secrets: [PAYFAST_MERCHANT_ID, PAYFAST_MERCHANT_KEY, PAYFAST_PASSPHRASE] },
+  async (request) => {
+    if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in before making a payment.");
+    const sponsorshipId = String(request.data?.sponsorshipId || "").trim();
+    if (!sponsorshipId || sponsorshipId.length > 128) throw new HttpsError("invalid-argument", "A valid sponsorship is required.");
+    const db = getFirestore();
+    const sponsorshipRef = db.doc(`sponsorships/${sponsorshipId}`);
+    const sponsorshipSnap = await sponsorshipRef.get();
+    if (!sponsorshipSnap.exists) throw new HttpsError("not-found", "Sponsorship not found.");
+    const sponsorship = sponsorshipSnap.data();
+    if (sponsorship.sponsorId !== request.auth.uid) throw new HttpsError("permission-denied", "This sponsorship does not belong to your account.");
+    if (["complete", "paid", "completed"].includes(String(sponsorship.paymentStatus || "").toLowerCase())) {
+      throw new HttpsError("already-exists", "This sponsorship has already been paid.");
     }
-  } catch (error) {
-    console.error("Error validating PayFast ITN", error);
-    return res.status(500).send("Server Error");
+    const amount = Number(sponsorship.amount);
+    if (!Number.isFinite(amount) || amount < 5) throw new HttpsError("failed-precondition", "A payment of at least R5.00 is required.");
+    const sponsorSnap = await db.doc(`users/${request.auth.uid}`).get();
+    const projectSnap = sponsorship.projectId ? await db.doc(`projects/${sponsorship.projectId}`).get() : null;
+    const sponsor = sponsorSnap.exists ? sponsorSnap.data() : {};
+    const project = projectSnap?.exists ? projectSnap.data() : {};
+    const total = (Math.round(amount * 100) + Math.round(Math.round(amount * 100) * 0.03)) / 100;
+    const clean = (value, fallback) => String(value || fallback).replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, " ").trim().slice(0, 100);
+    const requestOrigin = request.rawRequest?.get("origin");
+    let webOrigin = "";
+    try {
+      const parsedOrigin = requestOrigin ? new URL(requestOrigin) : null;
+      if (parsedOrigin && (parsedOrigin.protocol === "https:" || (parsedOrigin.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsedOrigin.hostname)))) {
+        webOrigin = parsedOrigin.origin;
+      }
+    } catch { /* Native clients do not send a browser origin. */ }
+    const returnUrl = webOrigin
+      ? `${webOrigin}/payment-verify?payment=returned&id=${encodeURIComponent(sponsorshipId)}`
+      : `${PAYMENT_RETURN_BASE}?paymentId=${encodeURIComponent(sponsorshipId)}&result=return`;
+    const cancelUrl = webOrigin
+      ? `${webOrigin}/payment-verify?payment=cancelled&id=${encodeURIComponent(sponsorshipId)}`
+      : `${PAYMENT_RETURN_BASE}?paymentId=${encodeURIComponent(sponsorshipId)}&result=cancel`;
+    const fields = {
+      merchant_id: PAYFAST_MERCHANT_ID.value(),
+      merchant_key: PAYFAST_MERCHANT_KEY.value(),
+      return_url: returnUrl,
+      cancel_url: cancelUrl,
+      notify_url: "https://us-central1-semester-2-project-c6235.cloudfunctions.net/payfastNotify",
+      name_first: clean(sponsor.organisationName || sponsor.name || sponsor.full_name, "Sponsor"),
+      email_address: String(request.auth.token.email || sponsor.email || "sponsor@impactmatch.org").trim(),
+      m_payment_id: sponsorshipId,
+      amount: total.toFixed(2),
+      item_name: clean(project.title || sponsorship.projectTitle, "Project sponsorship"),
+    };
+    const { encoded, signature } = checkoutSignature(fields, PAYFAST_PASSPHRASE.value());
+    const host = PAYFAST_SANDBOX ? "sandbox.payfast.co.za" : "www.payfast.co.za";
+    return { checkoutUrl: `https://${host}/eng/process?${encoded}&signature=${signature}` };
   }
+);
 
-  // 2. Only process the data if the payment actually cleared
-  if (payload.payment_status !== "COMPLETE") {
-    console.log(`Payment status is ${payload.payment_status}, ignoring.`);
-    return res.status(200).send("OK");
-  }
-
-  const sponsorshipId = payload.m_payment_id;
-  const payfastRef = payload.pf_payment_id; // PayFast's unique transaction ID
-  const amountPaid = Number(payload.amount_gross);
-
-  // 3. Firestore Transaction: Lock records so they succeed or fail together
-  try {
-    await db.runTransaction(async (transaction) => {
-      const sponsorshipRef = db.collection("sponsorships").doc(sponsorshipId);
-      const sponsorshipSnap = await transaction.get(sponsorshipRef);
-
-      if (!sponsorshipSnap.exists) throw new Error("Sponsorship not found");
-      const sponsorship = sponsorshipSnap.data();
-
-      // Idempotency check: Ensure we don't double-process the same payment
-      if (sponsorship.paymentStatus === "complete") return; 
-
-      const projectId = sponsorship.projectId;
-      const projectRef = db.collection("projects").doc(projectId);
-      const projectSnap = await transaction.get(projectRef);
-
-      if (!projectSnap.exists) throw new Error("Project not found");
-      const project = projectSnap.data();
-      const currentRaised = Number(project.raisedAmount) || 0;
-
-      // Create a unique Payment doc using PayFast's Ref (Prevents overwriting previous failed attempts)
-      const paymentRef = db.collection("payments").doc(payfastRef); 
-      
-      const paymentData = {
-        paymentId: payfastRef,
-        sponsorshipId: sponsorshipId,
-        projectId: projectId,
-        sponsorId: sponsorship.sponsorId || "", 
-        amountPaid: amountPaid,
-        provider: "payfast",
-        status: "complete",
-        payfastRef: payfastRef,
-        paidAt: admin.firestore.FieldValue.serverTimestamp(),
-      };
-
-      // Commit all writes at once
-      transaction.set(paymentRef, paymentData);
-      transaction.update(sponsorshipRef, {
-        status: "active",
-        paymentStatus: "complete",
-        transactionReference: payfastRef,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      transaction.update(projectRef, {
-        raisedAmount: currentRaised + amountPaid,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    });
-
-    // You MUST return 200 OK to PayFast, otherwise they will relentlessly retry the ping
-    return res.status(200).send("OK");
-  } catch (error) {
-    console.error("Firestore Transaction failed: ", error);
-    return res.status(500).send("Transaction Error");
-  }
+exports.payfastReturn = onRequest({ region: PAYMENT_REGION }, (req, res) => {
+  const id = String(req.query.paymentId || "");
+  const result = req.query.result === "cancel" ? "cancelled" : "returned";
+  if (!id || id.length > 128) return res.status(400).send("Missing payment reference.");
+  const deepLink = `impactmatch://payment-verify?payment=${result}&id=${encodeURIComponent(id)}`;
+  res.set("Cache-Control", "no-store");
+  res.status(200).send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Return to ImpactMatch</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:3rem 1rem;color:#26352f"><h1>Returning to ImpactMatch</h1><p>Your payment status will be checked securely in the app.</p><a href="${deepLink}">Open ImpactMatch</a><script>setTimeout(function(){location.href=${JSON.stringify(deepLink)}},250)</script></body></html>`);
 });
->>>>>>> 49197a0975c8c9c5287d46cce2c9b0bb574d640a
+
+exports.payfastNotify = onRequest(
+  { region: PAYMENT_REGION, secrets: [PAYFAST_MERCHANT_ID, PAYFAST_PASSPHRASE] },
+  async (req, res) => {
+    if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
+    const payload = req.body || {};
+    const sponsorshipId = String(payload.m_payment_id || "");
+    const payfastRef = String(payload.pf_payment_id || "");
+    const db = getFirestore();
+    if (!sponsorshipId || !payfastRef) return res.status(400).send("Missing payment reference.");
+
+    try {
+      const validationBody = new URLSearchParams(payload).toString();
+      const { signature: receivedSignature, ...signedPayload } = payload;
+      const { signature: expectedSignature } = checkoutSignature(signedPayload, PAYFAST_PASSPHRASE.value());
+      const received = Buffer.from(String(receivedSignature || ""), "hex");
+      const expected = Buffer.from(expectedSignature, "hex");
+      if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
+        return res.status(400).send("Invalid signature");
+      }
+      const validation = await fetch(`https://${PAYFAST_HOST}/eng/query/validate`, {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: validationBody,
+      });
+      if (!validation.ok || (await validation.text()).trim() !== "VALID") return res.status(400).send("Invalid ITN");
+      if (String(payload.merchant_id) !== PAYFAST_MERCHANT_ID.value()) return res.status(400).send("Invalid merchant");
+
+      const sponsorshipRef = db.doc(`sponsorships/${sponsorshipId}`);
+      const sponsorshipSnap = await sponsorshipRef.get();
+      if (!sponsorshipSnap.exists) return res.status(404).send("Sponsorship not found");
+      const sponsorship = sponsorshipSnap.data();
+      const principalCents = Math.round((Number(sponsorship.amount) || 0) * 100);
+      const expectedCents = principalCents + Math.round(principalCents * 0.03);
+      const paidCents = Math.round(Number(payload.amount_gross) * 100);
+      if (expectedCents !== paidCents) return res.status(400).send("Amount mismatch");
+      const principal = principalCents / 100;
+      const fee = (expectedCents - principalCents) / 100;
+      const total = expectedCents / 100;
+      const projectSnap = await db.doc(`projects/${sponsorship.projectId}`).get();
+      const project = projectSnap.exists ? projectSnap.data() : {};
+
+      const paymentRef = db.doc(`payments/${sponsorshipId}`);
+      if (payload.payment_status !== "COMPLETE") {
+        await paymentRef.set({
+          sponsorshipId, projectId: sponsorship.projectId || "", sponsorId: sponsorship.sponsorId || "",
+          ngoId: sponsorship.ngoId || project.ngoOwnerId || project.ownerId || "",
+          projectTitle: sponsorship.projectTitle || project.title || "", fundingType: sponsorship.fundingType || "",
+          amount: principal, sponsorshipAmount: principal, amountPaid: total, totalAmount: total,
+          platformFeeAmount: fee, platformFeeRate: 0.03, provider: "payfast",
+          paymentStatus: "failed", status: String(payload.payment_status || "failed").toLowerCase(),
+          payfastRef, updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        await sponsorshipRef.set({ paymentStatus: "failed", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return res.status(200).send("OK");
+      }
+
+      await db.runTransaction(async (transaction) => {
+        const [currentSnap, projectSnap] = await Promise.all([
+          transaction.get(sponsorshipRef),
+          transaction.get(db.doc(`projects/${sponsorship.projectId}`)),
+        ]);
+        if (!currentSnap.exists || !projectSnap.exists) throw new Error("Sponsorship or project missing");
+        if (String(currentSnap.data().paymentStatus).toLowerCase() === "complete") return;
+        const project = projectSnap.data();
+        transaction.set(paymentRef, {
+          paymentId: payfastRef, sponsorshipId, projectId: sponsorship.projectId,
+          sponsorId: sponsorship.sponsorId || "", ngoId: sponsorship.ngoId || project.ngoOwnerId || project.ownerId || "",
+          projectTitle: sponsorship.projectTitle || project.title || "", fundingType: sponsorship.fundingType || "",
+          amount: principal, sponsorshipAmount: principal, amountPaid: total, totalAmount: total,
+          platformFeeAmount: fee, platformFeeRate: 0.03, provider: "payfast", paymentMethod: "PayFast",
+          paymentStatus: "complete", status: "complete", payfastRef,
+          transactionReference: payfastRef, paidAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        transaction.update(sponsorshipRef, {
+          status: "active", paymentStatus: "complete", transactionReference: payfastRef,
+          platformFeeAmount: fee, totalAmount: total, paymentMethod: "PayFast",
+          paidAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+        });
+        transaction.update(db.doc(`projects/${sponsorship.projectId}`), {
+          raisedAmount: (Number(project.raisedAmount) || 0) + principal,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      });
+      return res.status(200).send("OK");
+    } catch (error) {
+      logger.error("PayFast ITN processing failed", error);
+      return res.status(500).send("Payment notification could not be processed.");
+    }
+  }
+);

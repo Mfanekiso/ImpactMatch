@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { doc, onSnapshot } from "firebase/firestore";
+import { ActivityIndicator, Alert, AppState, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { COLORS, NEUTRAL } from "../../components/PayUI";
-import { buildPayFastCheckoutUrl, PAYFAST_CONFIG } from "../../services/paymentApi";
+import { buildPayFastUrl } from "../../services/paymentApi";
 
 const PLATFORM_FEE_RATE = 0.03;
 const isPaymentConfirmed = (record) => {
@@ -28,6 +29,21 @@ export default function SponsorPaymentScreen({ route, navigation }) {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [payment, setPayment] = useState(null);
   const [checkoutError, setCheckoutError] = useState("");
+  const [checkoutOpened, setCheckoutOpened] = useState(false);
+  const [userReady, setUserReady] = useState(!!auth.currentUser);
+
+  // After the page reloads from PayFast, wait until Firebase knows who the user is
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => setUserReady(!!user));
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setProcessingPayment(false);
+    });
+    return () => subscription.remove();
+  }, []);
 
   const releaseSchedule = useMemo(() => {
     const acceptance = Math.round(principalCents / 4);
@@ -38,12 +54,10 @@ export default function SponsorPaymentScreen({ route, navigation }) {
 
   // Listen in real-time to payment doc and sponsorship doc
   useEffect(() => {
-    if (!sponsorshipId || !auth.currentUser) return undefined;
-    const unsubPayment = onSnapshot(doc(db, "payments", sponsorshipId), (snapshot) => {
-      if (snapshot.exists()) {
-        const paymentData = snapshot.data();
-        setPayment((previous) => ({ ...previous, ...paymentData }));
-      }
+    if (!sponsorshipId || !userReady) return undefined;
+    const unsubPayment = onSnapshot(query(collection(db, "payments"), where("sponsorshipId", "==", sponsorshipId)), (snapshot) => {
+      const paymentData = snapshot.docs.map((item) => item.data()).sort((a, b) => (b.paidAt?.seconds || 0) - (a.paidAt?.seconds || 0))[0];
+      if (paymentData) setPayment((previous) => ({ ...previous, ...paymentData }));
     }, (error) => {
       console.warn("Could not listen for payment status:", error?.message);
     });
@@ -55,6 +69,7 @@ export default function SponsorPaymentScreen({ route, navigation }) {
           ...previous,
           ...sponsorship,
           status: isPaymentConfirmed(sponsorship) ? "complete" : (previous?.status || sponsorship.status),
+          paymentStatus: sponsorship.paymentStatus || previous?.paymentStatus,
         }));
       }
     });
@@ -63,15 +78,15 @@ export default function SponsorPaymentScreen({ route, navigation }) {
       unsubPayment();
       unsubSponsorship();
     };
-  }, [sponsorshipId]);
+  }, [sponsorshipId, userReady]);
 
-const handlePayFastApiCheckout = async () => {
+  const handlePayFastCheckout = async () => {
     if (!auth.currentUser) {
       Alert.alert("Sign in required", "Please sign in again before paying.");
       return;
     }
     if (!sponsorshipId || principalCents < 500) {
-      Alert.alert("Payment unavailable", "A proposal of at least R5.00 is required to process payment.");
+      Alert.alert("Payment unavailable", "A sponsorship of at least R5.00 is required to process payment.");
       return;
     }
     if (isPaymentConfirmed(payment)) {
@@ -83,37 +98,42 @@ const handlePayFastApiCheckout = async () => {
     setCheckoutError("");
 
     try {
-      const payfastUrl = buildPayFastCheckoutUrl({
-        sponsorshipId,
-        amount: principalCents / 100,
-        projectTitle: title,
-        sponsorEmail: auth.currentUser.email,
-        sponsorName: auth.currentUser.displayName || "Sponsor",
-      });
-
-      const canOpen = await Linking.canOpenURL(payfastUrl);
-      if (canOpen) {
-        await Linking.openURL(payfastUrl);
-        // Do NOT set processingPayment to false here. 
-        // Leave it spinning while they are on the PayFast webpage!
+      const payfastUrl = buildPayFastUrl({ sponsorshipId, totalCents, title });
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        // Same tab on web, so PayFast can send the user back to this app
+        window.location.assign(payfastUrl);
       } else {
-        setProcessingPayment(false);
-        throw new Error("Could not open the PayFast checkout page.");
+        await Linking.openURL(payfastUrl);
       }
+      setCheckoutOpened(true);
+      setProcessingPayment(false);
     } catch (error) {
       setProcessingPayment(false);
       console.error("Payment Link Error:", error);
-      const message = error?.message || "Failed to initiate payment. Please check your connection.";
+      const message = error?.message || "Failed to open the payment page.";
       setCheckoutError(message);
       Alert.alert("Payment Error", message);
     }
   };
 
+  const goToDashboard = () => {
+    if (navigation?.navigate) {
+      navigation.navigate("SponsorTabs", { screen: "Impact" });
+    } else {
+      navigation?.goBack?.();
+    }
+  };
+
   const paid = isPaymentConfirmed(payment);
+  const paymentFailed = !paid && ["failed", "cancelled", "canceled"].includes(String(payment?.paymentStatus || payment?.status || "").toLowerCase());
 
   const statusMessage = paid
-    ? "PayFast API confirmed this payment. Your sponsorship is now active and funds have been credited to the NGO project."
-    : "Payment will be securely processed through the PayFast API. Both the NGO and Admin will receive real-time notification.";
+    ? "Your payment was received. Your sponsorship is now active and the funds have been credited to the NGO project."
+    : paymentFailed
+      ? "The payment was not completed. You can try again when you are ready."
+      : checkoutOpened
+        ? "The payment page has opened. Complete the payment there and you will be brought back here."
+        : "You will be taken to the PayFast sandbox (test mode) to complete the payment, then returned to the app.";
 
   return (
     <View style={styles.screen}>
@@ -125,7 +145,7 @@ const handlePayFastApiCheckout = async () => {
             </View>
             <Text style={styles.successTitle}>Payment Complete</Text>
             <Text style={styles.successSubtitle}>
-              Thank you! Your sponsorship has been processed via PayFast API.
+              Thank you! Your sponsorship has been processed via PayFast.
             </Text>
             {payment?.transactionReference ? (
               <Text style={styles.refText}>Ref: {payment.transactionReference}</Text>
@@ -154,46 +174,37 @@ const handlePayFastApiCheckout = async () => {
         <View style={styles.methodCard}>
           <View style={styles.methodLogo}><Text style={styles.methodLogoText}>PF</Text></View>
           <View style={styles.methodCopy}>
-            <Text style={styles.methodTitle}>PayFast API</Text>
-            <Text style={styles.methodDescription}>Card, Instant EFT, Zapper, Capitec Pay</Text>
+            <Text style={styles.methodTitle}>PayFast (sandbox)</Text>
+            <Text style={styles.methodDescription}>Test payment with fake money</Text>
           </View>
           <View style={styles.selectedMark}><Text style={styles.selectedMarkText}>✓</Text></View>
         </View>
 
         <Text style={styles.statusText}>{statusMessage}</Text>
-        {checkoutError ? <Text style={styles.errorText}>{checkoutError}</Text> : null}
+        {checkoutError || paymentFailed ? <Text style={styles.errorText}>{checkoutError || "Payment was unsuccessful or cancelled."}</Text> : null}
       </ScrollView>
 
       <View style={styles.bottom}>
         {paid ? (
-          <TouchableOpacity
-            style={styles.doneButton}
-            onPress={() => {
-              if (navigation?.navigate) {
-                navigation.navigate("SponsorTabs", { screen: "Impact" });
-              } else {
-                navigation?.goBack?.();
-              }
-            }}
-            accessibilityRole="button"
-          >
+          <TouchableOpacity style={styles.doneButton} onPress={goToDashboard} accessibilityRole="button">
             <Text style={styles.payButtonText}>View Impact Dashboard</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={[styles.payButton, processingPayment && styles.payButtonDisabled]}
-            onPress={handlePayFastApiCheckout}
+            onPress={handlePayFastCheckout}
             disabled={processingPayment}
             accessibilityRole="button"
           >
             {processingPayment ? (
               <ActivityIndicator color={COLORS.white} />
             ) : (
-              <Text style={styles.payButtonText}>Pay {formatRand(totalCents)} </Text>
+              <Text style={styles.payButtonText}>Pay {formatRand(totalCents)}</Text>
             )}
           </TouchableOpacity>
         )}
       </View>
+
     </View>
   );
 }
@@ -228,8 +239,8 @@ const styles = StyleSheet.create({
   statusText: { fontFamily: "Manrope_400Regular", color: NEUTRAL.muted, fontSize: 11, lineHeight: 16, paddingHorizontal: 2 },
   errorText: { fontFamily: "Manrope_500Medium", color: "#9B1C1C", fontSize: 12, lineHeight: 17 },
   bottom: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 18, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: NEUTRAL.border },
-  payButton: { height: 48, borderRadius: 11, backgroundColor: "#087456", alignItems: "center", justifyContent: "center" },
-  doneButton: { height: 48, borderRadius: 11, backgroundColor: "#059669", alignItems: "center", justifyContent: "center" },
+  payButton: { height: 48, borderRadius: 11, backgroundColor: "#087456", alignItems: "center", justifyContent: "center", alignSelf: "stretch" },
+  doneButton: { height: 48, borderRadius: 11, backgroundColor: "#059669", alignItems: "center", justifyContent: "center", alignSelf: "stretch" },
   payButtonDisabled: { opacity: 0.6 },
   payButtonText: { fontFamily: "Manrope_700Bold", color: COLORS.white, fontSize: 13 },
   successBanner: { backgroundColor: "#E7F4EF", borderRadius: 13, padding: 16, borderWidth: 1, borderColor: "#A7F3D0", alignItems: "center", gap: 6, marginBottom: 4 },

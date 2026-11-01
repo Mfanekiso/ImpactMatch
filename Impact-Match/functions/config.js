@@ -2,9 +2,8 @@
 //
 // REGION: for the Firestore trigger (fraud review) this MUST match the location of your
 // Firestore database (Firebase console -> Firestore Database -> top of the Data tab).
-// If your database is in a US multi-region ("nam5"), "us-central1" is correct.
-// The app (src/utils/aiApi.js) must use the same region.
-const REGION = "us-central1";
+// Database is in africa-south1 (Johannesburg).
+const REGION = "africa-south1";
 
 // Gemini model used for extraction, drafting and moderation (free tier).
 // If you ever get a "model not found" error, open Google AI Studio, check the current

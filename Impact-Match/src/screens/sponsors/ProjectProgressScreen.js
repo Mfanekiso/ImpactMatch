@@ -75,7 +75,7 @@ const formatTimeAgo = (timestamp) => {
 };
 
 export default function SponsorProjectUpdatesScreen({ navigation, route }) {
-  const projectId = route?.params?.projectId || "I2sSbjeV99pzZHrK6rfi";
+  const projectId = route?.params?.projectId;
   const [project, setProject] = useState(null);
   const [sponsorships, setSponsorships] = useState([]);
   const [updates, setUpdates] = useState([]);
@@ -91,7 +91,7 @@ export default function SponsorProjectUpdatesScreen({ navigation, route }) {
     // 1. Listen to Project Document
     const stopProject = onSnapshot(doc(db, "projects", projectId), (snap) => {
       setProject(snap.exists() ? { id: snap.id, ...snap.data() } : null);
-    });
+    }, () => setLoading(false));
 
     // 2. Listen to Sponsorships for accurate raised amount & sponsor count
     const stopSponsorships = onSnapshot(
@@ -150,7 +150,7 @@ export default function SponsorProjectUpdatesScreen({ navigation, route }) {
   if (!project) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyText}>Project unavailable.</Text>
+        <Text style={styles.emptyText}>{projectId ? "Project unavailable." : "No project was selected. Return to Impact and open a project to view its progress."}</Text>
       </View>
     );
   }
@@ -273,6 +273,15 @@ export default function SponsorProjectUpdatesScreen({ navigation, route }) {
                   </View>
 
                   <Text style={styles.updateBodyText}>{update.text}</Text>
+                  {(update.milestone || update.progress != null || update.beneficiaries != null) && (
+                    <View style={styles.progressCheck}>
+                      {update.milestone ? <Text style={styles.progressMilestone}>{update.milestone}</Text> : null}
+                      <View style={styles.progressCheckRow}>
+                        {update.progress != null ? <Text style={styles.progressCheckValue}>Reported progress: {Number(update.progress)}%</Text> : null}
+                        {update.beneficiaries != null ? <Text style={styles.progressCheckValue}>Beneficiaries: {Number(update.beneficiaries).toLocaleString("en-ZA")}</Text> : null}
+                      </View>
+                    </View>
+                  )}
                 </View>
 
                 {/* 2. SEPARATED ATTACHED MEDIA SECTION (Outside Description Box) */}
@@ -699,6 +708,10 @@ const styles = StyleSheet.create({
     color: C.body,
     fontFamily: FONT,
   },
+  progressCheck: { marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: "#F1F8F5", gap: 6 },
+  progressMilestone: { color: C.forest, fontSize: 14, fontWeight: "700" },
+  progressCheckRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  progressCheckValue: { color: C.body, fontSize: 12, fontWeight: "600" },
 
   // Separated Attached Media Section
   mediaSection: {

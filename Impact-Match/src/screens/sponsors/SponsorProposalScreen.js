@@ -13,7 +13,7 @@ import { doc, getDoc, addDoc, collection, serverTimestamp } from "firebase/fires
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { COLORS, NEUTRAL, ProgressBar } from "../../components/PayUI";
 
-const STEPS = ["Proposed", "Accepted", "Active", "Completed"];
+const PLATFORM_FEE_RATE = 0.03;
 
 export default function SponsorProposalScreen({ route, navigation }) {
   const projectId = route.params?.projectId;
@@ -55,16 +55,24 @@ export default function SponsorProposalScreen({ route, navigation }) {
       Alert.alert("Enter an amount", "Add the amount you want to give.");
       return;
     }
+    if (value < 5) {
+      Alert.alert("Amount too small", "The minimum sponsorship is R5.00.");
+      return;
+    }
     const user = auth.currentUser;
     if (!user) {
-      Alert.alert("Sign in needed", "Please sign in again to send a proposal.");
+      Alert.alert("Sign in needed", "Please sign in again to continue.");
       return;
     }
     const ngoId = project.ngoOwnerId || project.ownerId;
     if (ngoId === user.uid) {
-      Alert.alert("Choose another project", "You cannot send a sponsorship proposal to your own project.");
+      Alert.alert("Choose another project", "You cannot sponsor your own project.");
       return;
     }
+
+    // Money is saved in cents, same as the records already in Firestore
+    const amountCents = Math.round(value * 100);
+    const feeCents = Math.round(amountCents * PLATFORM_FEE_RATE);
 
     setSaving(true);
     try {
@@ -73,12 +81,16 @@ export default function SponsorProposalScreen({ route, navigation }) {
         projectTitle: project.title || "",
         ngoId: ngoId || null,
         sponsorId: user.uid,
-        amount: value,
+        amount: amountCents,
+        currency: "ZAR",
+        platformFeeRate: PLATFORM_FEE_RATE,
+        platformFeeAmount: feeCents,
         fundingType: type,
         message: message.trim(),
-        // A proposal is not a completed payment. The payment confirmation flow
-        // updates this record after PayFast verifies that the money was sent.
-        status: "complete",
+        // Not paid yet. This changes to "paid" / "active" only after PayFast
+        // sends the user back and the payment is recorded.
+        paymentStatus: "unpaid",
+        status: "proposed",
         createdAt: serverTimestamp(),
       });
       navigation.navigate("SponsorPayment", {
@@ -87,7 +99,7 @@ export default function SponsorProposalScreen({ route, navigation }) {
         title: project.title,
       });
     } catch (error) {
-      Alert.alert("Could not send proposal", error?.message || "Please try again.");
+      Alert.alert("Could not continue", error?.message || "Please try again.");
     }
     setSaving(false);
   };
@@ -158,18 +170,6 @@ export default function SponsorProposalScreen({ route, navigation }) {
           placeholder="Tell them why you want to help"
           multiline
         />
-
-        <View style={styles.card}>
-          <Text style={styles.label}>What happens next</Text>
-          <View style={styles.row}>
-            {STEPS.map((step, i) => (
-              <View key={step} style={styles.step}>
-                <View style={[styles.dot, i === 0 && styles.dotOn]} />
-                <Text style={styles.stepText}>{step}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
       </ScrollView>
 
       <View style={styles.bottom}>
@@ -204,10 +204,6 @@ const styles = StyleSheet.create({
   optionOn: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
   optionText: { fontFamily: "Manrope_500Medium", color: NEUTRAL.text },
   optionTextOn: { fontFamily: "Manrope_700Bold", color: COLORS.primary },
-  step: { flex: 1, alignItems: "center", gap: 6 },
-  dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: NEUTRAL.border },
-  dotOn: { backgroundColor: COLORS.primary },
-  stepText: { fontFamily: "Manrope_500Medium", fontSize: 12, color: NEUTRAL.muted },
   bottom: { padding: 20, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: NEUTRAL.border },
   button: { height: 52, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
   buttonOff: { opacity: 0.6 },

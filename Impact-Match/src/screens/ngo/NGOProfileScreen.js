@@ -10,7 +10,6 @@ import {
     Image,
     ActivityIndicator,
     Alert,
-    Platform,
     Modal,
     TextInput,
 } from "react-native";
@@ -37,51 +36,12 @@ import { auth, db } from "../../../Backend/firebaseConfig";
 import { removePushTokenForUser } from "../../utils/pushNotifications";
 import { cacheProfile } from "../../utils/profileCache";
 import { withCoordinates } from "../../utils/geocode";
+import { cloudinaryDeliveryUrl, uploadToCloudinary } from "../../services/cloudinaryUpload";
 
 // ─── CLOUDINARY CONFIGURATION ───────────────────────────────────────────
-const CLOUDINARY_CLOUD_NAME = "dtpp6ojbl";
-const CLOUDINARY_UPLOAD_PRESET = "impactmatch_updates";
-
 const uploadNGOImageToCloudinary = async (asset, uid) => {
-    const fileName = asset.fileName || `ngo_avatar_${uid}_${Date.now()}.jpg`;
-    const mimeType = asset.mimeType || "image/jpeg";
-
-    const formData = new FormData();
-
-    // Handle BOTH Web (localhost) and Mobile (Expo Go)
-    if (Platform.OS === "web") {
-        const fileResponse = await fetch(asset.uri);
-        const blob = await fileResponse.blob();
-        formData.append("file", blob, fileName);
-    } else {
-        formData.append("file", {
-            uri: asset.uri,
-            type: mimeType,
-            name: fileName,
-        });
-    }
-
-    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    formData.append("folder", "impactmatch/ngo_profiles");
-
-    const endpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-
-    const response = await fetch(endpoint, {
-        method: "POST",
-        body: formData,
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.secure_url) {
-        throw new Error(data.error?.message || "Failed to upload image to Cloudinary.");
-    }
-
-    // Deliver auto-compressed 400x400 square avatar
-    return data.secure_url.replace(
-        "/upload/",
-        "/upload/f_auto,q_auto,w_400,h_400,c_fill/"
-    );
+    const data = await uploadToCloudinary(asset, { folder: "impactmatch/ngo_profiles", fallbackName: `ngo_avatar_${uid}_${Date.now()}` });
+    return cloudinaryDeliveryUrl(data.secure_url, "f_auto,q_auto,w_400,h_400,c_fill");
 };
 
 // ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────

@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,13 +24,11 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import { cloudinaryDeliveryUrl, uploadToCloudinary as uploadMediaToCloudinary } from "../../services/cloudinaryUpload";
 
 // ============================================================================
 // CLOUDINARY CONFIGURATION (Unsigned Upload - Safe for React Native)
 // ============================================================================
-const CLOUDINARY_CLOUD_NAME = "dtpp6ojbl";
-const CLOUDINARY_UPLOAD_PRESET = "impactmatch_updates";
-
 const C = {
   background: "#F5F8F7",
   surface: "#FFFFFF",
@@ -59,49 +56,19 @@ const money = (value) => `R ${Number(value || 0).toLocaleString("en-ZA")}`;
 const uploadToCloudinary = async (asset) => {
   const isVideo =
     asset.type === "video" || (asset.mimeType && asset.mimeType.startsWith("video/"));
-  const defaultExt = isVideo ? "mp4" : "jpg";
-  const fileName = asset.fileName || `update_${Date.now()}.${defaultExt}`;
-  const mimeType = asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg");
-
-  const formData = new FormData();
-
-  // Handle BOTH Web (localhost) and Mobile (Expo Go)
-  if (Platform.OS === "web") {
-    const fileResponse = await fetch(asset.uri);
-    const blob = await fileResponse.blob();
-    formData.append("file", blob, fileName);
-  } else {
-    formData.append("file", {
-      uri: asset.uri,
-      type: mimeType,
-      name: fileName,
-    });
-  }
-
-  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-  formData.append("folder", "impactmatch/project_updates");
-
-  const endpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    body: formData,
+  const data = await uploadMediaToCloudinary(asset, {
+    folder: "impactmatch/project_updates",
+    resourceType: isVideo ? "video" : "image",
+    fallbackName: `update_${Date.now()}`,
   });
-
-  const data = await response.json();
-
-  if (!response.ok || !data.secure_url) {
-    throw new Error(data.error?.message || "Failed to upload media to Cloudinary.");
-  }
-
-  const optimizedUrl = data.secure_url.replace("/upload/", "/upload/f_auto,q_auto/");
+  const optimizedUrl = cloudinaryDeliveryUrl(data.secure_url, "f_auto,q_auto");
 
   return {
     url: optimizedUrl,
     rawUrl: data.secure_url,
     publicId: data.public_id,
     type: data.resource_type || (isVideo ? "video" : "image"),
-    name: fileName,
+    name: data.fileName,
   };
 };
 
