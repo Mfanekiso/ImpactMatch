@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import ProfileImage from "../../components/ProfileImage";
 import {
     useFonts,
     Manrope_400Regular,
@@ -88,9 +89,11 @@ function MatchCard({ match, onPress }) {
 
     return (
         <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={onPress}>
-            <View style={[styles.avatar, { backgroundColor: match.color }]}>
-                <Text style={styles.avatarText}>{match.shortName}</Text>
-            </View>
+            <ProfileImage profile={match} style={styles.avatar} fallback={
+                <View style={[styles.avatar, { backgroundColor: match.color }]}>
+                    <Text style={styles.avatarText}>{match.shortName}</Text>
+                </View>
+            } />
 
             <View style={styles.cardContent}>
                 <View style={styles.nameRow}>
@@ -177,6 +180,7 @@ export default function SponsorMatchesScreen({ navigation }) {
 
                     return {
                         id: docSnap.id,
+                        profileImageUrl: data.profileImageUrl || data.photoURL || data.logoUrl || null,
                         name: data.organisationName || "Unnamed NGO",
                         shortName: getInitials(data.organisationName),
                         color: AVATAR_COLORS[index % AVATAR_COLORS.length],

@@ -8,6 +8,7 @@ import {
     StyleSheet,
     StatusBar,
     ActivityIndicator,
+    Image,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import {
@@ -56,6 +57,7 @@ export default function NGOHomeScreen({ navigation, route }) {
     const [loadingSponsors, setLoadingSponsors] = React.useState(true);
     const [interestStats, setInterestStats] = React.useState({ interested: 0, mutual: 0 });
     const [liveOrganisationName, setLiveOrganisationName] = React.useState("");
+    const [profileImageUrl, setProfileImageUrl] = React.useState(null);
     const [fontsLoaded] = useFonts({
         Manrope_400Regular,
         Manrope_500Medium,
@@ -78,6 +80,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                 ]);
                 const ngoProfile = profileSnap.exists() ? profileSnap.data() : {};
                 if (active) setLiveOrganisationName(ngoProfile.organisationName || "");
+                if (active) setProfileImageUrl(ngoProfile.profileImageUrl || ngoProfile.photoURL || ngoProfile.logoUrl || null);
                 const list = sponsorsSnap.docs
                     .filter((item) => item.id !== uid && item.data().profileCompleted)
                     .map((item, index) => {
@@ -94,6 +97,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                             causes: Array.isArray(data.preferredCauses) ? data.preferredCauses : [],
                             matchScore,
                             matchPercentage: matchScore,
+                            profileImageUrl: data.profileImageUrl || data.photoURL || data.logoUrl || null,
                             colorIndex: index,
                         };
                     })
@@ -153,7 +157,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                             <Ionicons name="notifications-outline" size={20} color={COLORS.ivory} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.profileButton} activeOpacity={0.7} accessibilityLabel="Open profile" onPress={() => navigation.navigate("NGOProfile")}>
-                            <Ionicons name="person-circle-outline" size={23} color={COLORS.ivory} />
+                            {profileImageUrl ? <Image source={{ uri: profileImageUrl }} style={styles.profileImage} /> : <Ionicons name="person-circle-outline" size={23} color={COLORS.ivory} />}
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -280,7 +284,7 @@ export default function NGOHomeScreen({ navigation, route }) {
                             </View>
 
                             <View style={styles.sponsorActionIcon}>
-                                <Ionicons name="business-outline" size={22} color={COLORS.primary} />
+                                {sponsor.profileImageUrl ? <Image source={{ uri: sponsor.profileImageUrl }} style={styles.sponsorAvatarImage} /> : <Ionicons name="business-outline" size={22} color={COLORS.primary} />}
                             </View>
                         </TouchableOpacity>
                     ))
@@ -567,6 +571,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
+    sponsorAvatarImage: { width: "100%", height: "100%", borderRadius: 12 },
 
     /* Empty State */
     emptyText: {
@@ -620,4 +625,5 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
+    profileImage: { width: "100%", height: "100%", borderRadius: 20 },
 });

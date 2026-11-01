@@ -183,3 +183,7 @@ td .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
   .page-head { align-items: stretch; }
   .dashboard-search { max-width: none; }
 }
+
+ .badge.active { background: var(--success-bg); color: var(--success); }
+ .badge.suspended { background: #e5e7eb; color: #4b5563; }
+ .badge.ngo { background: var(--warning-bg); color: var(--warning); }

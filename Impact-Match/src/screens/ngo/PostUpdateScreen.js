@@ -74,8 +74,8 @@ export default function PostUpdateScreen({ navigation, route }) {
             <TextInput style={styles.input} value={beneficiaries} onChangeText={setBeneficiaries} keyboardType="numeric" placeholder="120" editable={!saving} />
           </View>
         </View>
-        <Text style={styles.label}>What happened</Text>
-        <TextInput style={[styles.input, styles.textArea]} value={text} onChangeText={setText} multiline placeholder="Describe the progress and any challenges" editable={!saving} />
+        <Text style={styles.label}>What did you add, and what does it do?</Text>
+        <TextInput style={[styles.input, styles.textArea]} value={text} onChangeText={setText} multiline placeholder="Describe what was added, how it works, and the progress made" editable={!saving} />
         <Text style={styles.note}>Updates are marked as self-reported. Do not include sensitive personal information about beneficiaries.</Text>
       </ScrollView>
       <View style={styles.bottom}>

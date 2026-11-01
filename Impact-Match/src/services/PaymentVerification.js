@@ -1,46 +1,52 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { doc, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { db } from "../../Backend/firebaseConfig"; // Adjust path if needed
+import { auth, db } from "../../Backend/firebaseConfig";
+import { markPaymentResult } from "./paymentApi";
 
 export default function PaymentVerification({ route, navigation }) {
   const [status, setStatus] = useState("idle");
   const [iconIndex, setIconIndex] = useState(0);
-  
-  // The sequence of Ionicons to cycle through
+
   const loadingIcons = ["card-outline", "swap-horizontal-outline", "shield-checkmark-outline"];
   const currentIcon = loadingIcons[iconIndex];
 
+  const returnToApp = useCallback(() => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "SponsorTabs", params: { screen: "Impact" } }],
+    });
+  }, [navigation]);
+
   useEffect(() => {
-    // Grab parameters passed from deep linking / React Navigation
     const paymentState = route?.params?.payment;
     const sponsorshipId = route?.params?.id;
 
     let timeout;
     let returnTimer;
     let finished = false;
-    const returnToApp = () => navigation.reset({
-      index: 0,
-      routes: [{ name: "SponsorTabs", params: { screen: "Impact" } }],
-    });
+    let started = false;
+    let unsubscribeSnapshot = () => { };
     const finish = (nextStatus) => {
       if (finished) return;
       finished = true;
       clearTimeout(timeout);
       setStatus(nextStatus);
-      returnTimer = setTimeout(returnToApp, 1400);
+      if (nextStatus === "success") returnTimer = setTimeout(returnToApp, 2500);
+      if (nextStatus === "pending") returnTimer = setTimeout(returnToApp, 1400);
     };
 
     if (paymentState === "cancelled") {
       setStatus("error");
-      returnTimer = setTimeout(returnToApp, 1400);
+      returnTimer = setTimeout(returnToApp, 3500);
       return () => clearTimeout(returnTimer);
     }
 
-    if (paymentState !== "complete" || !sponsorshipId) {
+    if (!["returned", "complete"].includes(paymentState) || !sponsorshipId) {
       setStatus("error");
-      returnTimer = setTimeout(returnToApp, 1400);
+      returnTimer = setTimeout(returnToApp, 3500);
       return () => clearTimeout(returnTimer);
     }
 
@@ -50,36 +56,52 @@ export default function PaymentVerification({ route, navigation }) {
     }, 800);
     timeout = setTimeout(() => finish("pending"), 20000);
 
-    const unsubscribe = onSnapshot(
-      doc(db, "sponsorships", sponsorshipId),
-      (docSnap) => {
-        if (!docSnap.exists()) return;
-        const data = docSnap.data();
-        if (
-          String(data.paymentStatus || "").toLowerCase() === "complete" ||
-          ["active", "complete"].includes(String(data.status || "").toLowerCase())
-        ) finish("success");
-      },
-      (error) => {
-        console.error("Firestore listener error:", error);
-        finish("pending");
-      }
-    );
+    // Wait until Firebase knows who the user is (needed after coming back from PayFast)
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (!user || started) return;
+      started = true;
+
+      // Sandbox payment: record the payment as paid in Firestore
+      markPaymentResult(sponsorshipId, "success").catch((error) => {
+        console.error("Could not record payment:", error);
+        finish("error");
+      });
+
+      // Then watch the sponsorship until it shows as paid
+      unsubscribeSnapshot = onSnapshot(
+        doc(db, "sponsorships", sponsorshipId),
+        (docSnap) => {
+          if (!docSnap.exists()) return;
+          const data = docSnap.data();
+          if (
+            ["paid", "complete", "completed"].includes(String(data.paymentStatus || "").toLowerCase()) ||
+            ["active", "complete"].includes(String(data.status || "").toLowerCase()) ||
+            !!data.transactionReference
+          ) finish("success");
+          else if (["failed", "cancelled", "canceled"].includes(String(data.paymentStatus || "").toLowerCase())) finish("error");
+        },
+        (error) => {
+          console.error("Firestore listener error:", error);
+          finish("pending");
+        }
+      );
+    });
 
     return () => {
       clearInterval(iconInterval);
       clearTimeout(timeout);
       clearTimeout(returnTimer);
-      unsubscribe();
+      unsubscribeAuth();
+      unsubscribeSnapshot();
     };
-  }, [route?.params, navigation]);
+  }, [route?.params, navigation, returnToApp]);
 
   if (status === "idle") return null;
 
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        
+
         {status === "processing" && (
           <View style={styles.content}>
             <View style={[styles.iconContainer, styles.processingIconBg]}>
@@ -98,9 +120,9 @@ export default function PaymentVerification({ route, navigation }) {
             </View>
             <Text style={styles.title}>Payment Successful!</Text>
             <Text style={styles.subtitle}>Thank you! Your sponsorship has been securely recorded.</Text>
-            <Pressable 
-              style={[styles.button, styles.successButton]} 
-              onPress={() => navigation.navigate("SponsorTabs", { screen: "Impact" })} 
+            <Pressable
+              style={[styles.button, styles.successButton]}
+              onPress={returnToApp}
             >
               <Text style={styles.buttonText}>View Impact Dashboard</Text>
             </Pressable>
@@ -112,11 +134,11 @@ export default function PaymentVerification({ route, navigation }) {
             <View style={[styles.iconContainer, styles.errorIconBg]}>
               <Ionicons name="close-circle" size={48} color="#DC2626" />
             </View>
-            <Text style={styles.title}>Payment Incomplete</Text>
-            <Text style={styles.subtitle}>Your payment was cancelled or encountered an error.</Text>
-            <Pressable 
-              style={[styles.button, styles.errorButton]} 
-              onPress={() => navigation.navigate("SponsorTabs", { screen: "Home" })} 
+            <Text style={styles.title}>Payment Unsuccessful</Text>
+            <Text style={styles.subtitle}>PayFast did not confirm this payment. You can return to your payment page and try again.</Text>
+            <Pressable
+              style={[styles.button, styles.errorButton]}
+              onPress={returnToApp}
             >
               <Text style={[styles.buttonText, { color: "#374151" }]}>Return Home</Text>
             </Pressable>
@@ -125,12 +147,12 @@ export default function PaymentVerification({ route, navigation }) {
 
         {status === "pending" && (
           <View style={styles.content}>
-            <View style={[styles.iconContainer, styles.errorIconBg]}>
+            <View style={[styles.iconContainer, styles.pendingIconBg]}>
               <Ionicons name="time-outline" size={48} color="#D97706" />
             </View>
-            <Text style={styles.title}>Still confirming</Text>
-            <Text style={styles.subtitle}>Returning to Impact Match. Your payment status will update when confirmation arrives.</Text>
-            <Pressable style={[styles.button, styles.successButton]} onPress={() => navigation.reset({ index: 0, routes: [{ name: "SponsorTabs", params: { screen: "Impact" } }] })}>
+            <Text style={styles.title}>Payment still confirming</Text>
+            <Text style={styles.subtitle}>PayFast has not sent confirmation yet. Your payment page will update when it arrives.</Text>
+            <Pressable style={[styles.button, styles.successButton]} onPress={returnToApp}>
               <Text style={styles.buttonText}>Return to Impact Match</Text>
             </Pressable>
           </View>
@@ -175,6 +197,7 @@ const styles = StyleSheet.create({
   processingIconBg: { backgroundColor: "#EFF6FF" },
   successIconBg: { backgroundColor: "#DCFCE7" },
   errorIconBg: { backgroundColor: "#FEE2E2" },
+  pendingIconBg: { backgroundColor: "#FEF3C7" },
   title: {
     fontSize: 20,
     fontWeight: "bold",

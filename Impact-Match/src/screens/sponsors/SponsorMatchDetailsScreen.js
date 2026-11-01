@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     StyleSheet,
     StatusBar,
+    Image,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { doc, getDoc } from "firebase/firestore";
@@ -52,6 +53,7 @@ function getInitials(name) {
 export default function SponsorMatchDetailsScreen({ navigation, route }) {
     const { match } = route.params || {};
     const [sponsorName, setSponsorName] = useState("You");
+    const [sponsorImageUrl, setSponsorImageUrl] = useState(null);
 
     // Show the signed-in sponsor's real organisation name
     useEffect(() => {
@@ -59,8 +61,10 @@ export default function SponsorMatchDetailsScreen({ navigation, route }) {
         if (!uid) return;
         getDoc(doc(db, "users", uid))
             .then((snap) => {
-                if (snap.exists() && snap.data().organisationName) {
-                    setSponsorName(snap.data().organisationName);
+                if (snap.exists()) {
+                    const profile = snap.data();
+                    if (profile.organisationName) setSponsorName(profile.organisationName);
+                    setSponsorImageUrl(profile.profileImageUrl || profile.photoURL || profile.logoUrl || null);
                 }
             })
             .catch((error) => console.log("Could not load sponsor name:", error?.message));
@@ -96,9 +100,9 @@ export default function SponsorMatchDetailsScreen({ navigation, route }) {
             >
                 <View style={styles.comparisonCard}>
                     <View style={styles.comparisonSide}>
-                        <View style={[styles.compareAvatar, { backgroundColor: SPONSOR_COLOR }]}>
-                            <Text style={styles.compareAvatarText}>{getInitials(sponsorName)}</Text>
-                        </View>
+                        {sponsorImageUrl ? <Image source={{ uri: sponsorImageUrl }} style={styles.compareAvatar} /> : (
+                            <View style={[styles.compareAvatar, { backgroundColor: SPONSOR_COLOR }]}><Text style={styles.compareAvatarText}>{getInitials(sponsorName)}</Text></View>
+                        )}
                         <Text style={styles.compareName} numberOfLines={2}>
                             {sponsorName}
                         </Text>
@@ -113,9 +117,9 @@ export default function SponsorMatchDetailsScreen({ navigation, route }) {
                     </View>
 
                     <View style={styles.comparisonSide}>
-                        <View style={[styles.compareAvatar, { backgroundColor: match.color }]}>
-                            <Text style={styles.compareAvatarText}>{match.shortName}</Text>
-                        </View>
+                        {match.profileImageUrl ? <Image source={{ uri: match.profileImageUrl }} style={styles.compareAvatar} /> : (
+                            <View style={[styles.compareAvatar, { backgroundColor: match.color }]}><Text style={styles.compareAvatarText}>{match.shortName}</Text></View>
+                        )}
                         <Text style={styles.compareName} numberOfLines={2}>
                             {match.name}
                         </Text>

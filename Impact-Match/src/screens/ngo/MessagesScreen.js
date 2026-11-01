@@ -11,8 +11,9 @@ import {
 } from "react-native";
 
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import ProfileImage from "../../components/ProfileImage";
 
 // ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
 const COLORS = {
@@ -49,24 +50,33 @@ export default function MessagesScreen({ navigation }) {
             where("participants", "array-contains", currentUser.uid)
         );
 
+        let active = true;
         const unsubscribe = onSnapshot(
             conversationsQuery,
-            (snapshot) => {
-                const conversationList = snapshot.docs.map((doc) => {
-                    const data = doc.data();
+            async (snapshot) => {
+                const conversationList = await Promise.all(snapshot.docs.map(async (conversationDoc) => {
+                    const data = conversationDoc.data();
                     const otherUserId = data.participants?.find((id) => id !== currentUser.uid);
-                    const otherUser = data.participantDetails?.[otherUserId];
+                    let otherUser = data.participantDetails?.[otherUserId] || {};
+                    if (!otherUser.profileImageUrl && !otherUser.photoURL && otherUserId) {
+                        try {
+                            const userSnapshot = await getDoc(doc(db, "users", otherUserId));
+                            if (userSnapshot.exists()) otherUser = { ...userSnapshot.data(), ...otherUser };
+                        } catch {}
+                    }
 
                     return {
-                        id: doc.id,
+                        id: conversationDoc.id,
                         name: otherUser?.name || "Unknown User",
                         role: otherUser?.role || "",
+                        profileImageUrl: otherUser.profileImageUrl || otherUser.photoURL || otherUser.logoUrl || null,
                         lastMessage: data.lastMessage || "No messages yet",
                         lastMessageAt: data.lastMessageAt || null,
                         time: data.lastMessageAt ? formatTime(data.lastMessageAt) : "",
                         unreadCount: data.unreadCount?.[currentUser.uid] || 0,
                     };
-                });
+                }));
+                if (!active) return;
 
                 // Newest conversation first
                 conversationList.sort((a, b) => {
@@ -83,7 +93,7 @@ export default function MessagesScreen({ navigation }) {
             }
         );
 
-        return unsubscribe;
+        return () => { active = false; unsubscribe(); };
     }, []);
 
     // =====================================================
@@ -106,9 +116,9 @@ export default function MessagesScreen({ navigation }) {
             activeOpacity={0.7}
             onPress={() => openConversation(item.id)}
         >
-            <View style={styles.avatar}>
-                <Ionicons name="person" size={22} color={COLORS.primary} />
-            </View>
+            <ProfileImage profile={item} style={styles.avatar} fallback={
+                <View style={styles.avatar}><Ionicons name="person" size={22} color={COLORS.primary} /></View>
+            } />
 
             <View style={styles.conversationContent}>
                 <View style={styles.conversationTopRow}>

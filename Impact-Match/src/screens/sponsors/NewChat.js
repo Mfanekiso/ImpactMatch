@@ -22,6 +22,7 @@ import {
 } from "firebase/firestore";
 
 import { auth, db } from "../../../Backend/firebaseConfig";
+import ProfileImage from "../../components/ProfileImage";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -164,10 +165,12 @@ export default function NewChat({ navigation }) {
                 [currentUserId]: {
                     name: currentUserName,
                     role: currentUserData.role,
+                    profileImageUrl: currentUserData.profileImageUrl || currentUserData.photoURL || currentUserData.logoUrl || null,
                 },
                 [otherUserId]: {
                     name: otherUserName,
                     role: otherUser.role,
+                    profileImageUrl: otherUser.profileImageUrl || otherUser.photoURL || otherUser.logoUrl || null,
                 },
             };
             const existingConversation = await getDoc(conversationRef);
@@ -216,11 +219,9 @@ export default function NewChat({ navigation }) {
                 activeOpacity={0.7}
                 onPress={() => startConversation(item)}
             >
-                <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                        {name.charAt(0).toUpperCase()}
-                    </Text>
-                </View>
+                <ProfileImage profile={item} style={styles.avatar} fallback={
+                    <View style={styles.avatar}><Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text></View>
+                } />
 
                 <View style={styles.userInfo}>
                     <Text style={styles.name}>

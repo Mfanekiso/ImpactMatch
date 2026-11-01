@@ -12,6 +12,7 @@ import {
     Alert,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import ProfileImage from "../../components/ProfileImage";
 import {
     useFonts,
     Manrope_400Regular,
@@ -135,7 +136,7 @@ export default function SponsorHomeScreen({ navigation, route }) {
             const results = snapshot.docs.filter((docSnap) => docSnap.data().profileCompleted).map((docSnap, index) => ({
                 id: docSnap.id,
                 color: AVATAR_COLORS[index % AVATAR_COLORS.length],
-                ...((({ organisationName, location, profileImageUrl, targetCommunity, mission, fundingRequired, profileCompleted, causes }) => ({ organisationName, location, profileImageUrl, targetCommunity, mission, fundingRequired, profileCompleted, causes }))(docSnap.data())),
+                ...((({ organisationName, location, profileImageUrl, photoURL, logoUrl, targetCommunity, mission, fundingRequired, profileCompleted, causes }) => ({ organisationName, location, profileImageUrl: profileImageUrl || photoURL || logoUrl || null, targetCommunity, mission, fundingRequired, profileCompleted, causes }))(docSnap.data())),
             }));
 
             setNgos(results);
@@ -370,9 +371,11 @@ export default function SponsorHomeScreen({ navigation, route }) {
                 <View style={styles.liveList}>
                     {moreNgos.slice(0, 3).map((ngo) => (
                         <TouchableOpacity key={ngo.id} style={styles.liveNgoCard} onPress={() => goToOpportunity(ngo)} activeOpacity={0.82}>
-                            <View style={[styles.liveAvatar, { backgroundColor: ngo.color }]}>
-                                <Text style={styles.liveAvatarText}>{getInitials(ngo.organisationName)}</Text>
-                            </View>
+                            <ProfileImage profile={ngo} style={styles.liveAvatar} fallback={
+                                <View style={[styles.liveAvatar, { backgroundColor: ngo.color }]}>
+                                    <Text style={styles.liveAvatarText}>{getInitials(ngo.organisationName)}</Text>
+                                </View>
+                            } />
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.liveNgoName} numberOfLines={1}>{ngo.organisationName || "Organisation"}</Text>
                                 <Text style={styles.liveNgoMeta} numberOfLines={1}>{ngo.targetCommunity || "Community impact"} · {ngo.location || "Location not provided"}</Text>

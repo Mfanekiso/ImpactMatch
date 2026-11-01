@@ -10,8 +10,9 @@ import {
     ActivityIndicator,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../../Backend/firebaseConfig";
+import ProfileImage from "../../components/ProfileImage";
 import {
     useFonts,
     Manrope_400Regular,
@@ -69,29 +70,38 @@ export default function SponsorMessagesScreen({ navigation }) {
             where("participants", "array-contains", currentUser.uid)
         );
 
+        let active = true;
         const unsubscribe = onSnapshot(
             conversationsQuery,
-            (snapshot) => {
-                const conversationList = snapshot.docs.map((doc) => {
-                    const data = doc.data();
+            async (snapshot) => {
+                const conversationList = await Promise.all(snapshot.docs.map(async (conversationDoc) => {
+                    const data = conversationDoc.data();
 
                     const otherUserId = data.participants?.find(
                         (id) => id !== currentUser.uid
                     );
 
-                    const otherUser =
+                    let otherUser =
                         data.participantDetails?.[otherUserId] || {};
+                    if (!otherUser.profileImageUrl && !otherUser.photoURL && otherUserId) {
+                        try {
+                            const userSnapshot = await getDoc(doc(db, "users", otherUserId));
+                            if (userSnapshot.exists()) otherUser = { ...userSnapshot.data(), ...otherUser };
+                        } catch {}
+                    }
 
                     return {
-                        id: doc.id,
+                        id: conversationDoc.id,
                         name: otherUser.name || "Organisation",
                         role: otherUser.role || "NGO",
+                        profileImageUrl: otherUser.profileImageUrl || otherUser.photoURL || otherUser.logoUrl || null,
                         lastMessage: data.lastMessage || "No messages yet",
                         lastMessageAt: data.lastMessageAt || null,
                         unreadCount:
                             data.unreadCount?.[currentUser.uid] || 0,
                     };
-                });
+                }));
+                if (!active) return;
 
                 conversationList.sort((a, b) => {
                     const timeA = a.lastMessageAt?.toMillis
@@ -114,7 +124,7 @@ export default function SponsorMessagesScreen({ navigation }) {
             }
         );
 
-        return unsubscribe;
+        return () => { active = false; unsubscribe(); };
     }, []);
 
     const formatTime = (timestamp) => {
@@ -158,11 +168,13 @@ export default function SponsorMessagesScreen({ navigation }) {
                     })
                 }
             >
-                <View style={[styles.avatar, isUnread && styles.avatarUnread]}>
-                    <Text style={[styles.avatarText, isUnread && styles.avatarTextUnread]}>
-                        {item.name.charAt(0).toUpperCase()}
-                    </Text>
-                </View>
+                <ProfileImage profile={item} style={styles.avatar} fallback={
+                    <View style={[styles.avatar, isUnread && styles.avatarUnread]}>
+                        <Text style={[styles.avatarText, isUnread && styles.avatarTextUnread]}>
+                            {item.name.charAt(0).toUpperCase()}
+                        </Text>
+                    </View>
+                } />
 
                 <View style={styles.conversationContent}>
                     <View style={styles.topRow}>

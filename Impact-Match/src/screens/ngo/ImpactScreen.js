@@ -35,6 +35,7 @@ import {
     where,
     onSnapshot,
     serverTimestamp,
+    getDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import TransactionsSection from "../../components/TransactionsSection"; // NEW
@@ -97,6 +98,9 @@ export default function NgoImpactScreen({ navigation }) {
     const [goalAmount, setGoalAmount] = useState("");
     const [imageUrl, setImageUrl] = useState("");
     const [status, setStatus] = useState("Active");
+
+    // Sponsorship data per project (projectId -> { raised, sponsorCount, sponsorNames })
+    const [projectSponsorships, setProjectSponsorships] = useState({});
 
     // Options menu state
     const [selectedProject, setSelectedProject] = useState(null);
@@ -219,6 +223,43 @@ export default function NgoImpactScreen({ navigation }) {
             unsubscribeProjects.forEach((unsubscribe) => unsubscribe());
         };
     }, [fadeAnim, slideAnim, barAnim]);
+
+    // Load sponsorship data for each project to show real funding
+    useEffect(() => {
+        if (projects.length === 0) return;
+        const unsubscribers = [];
+        projects.forEach((project) => {
+            const q = query(collection(db, "sponsorships"), where("projectId", "==", project.id));
+            const unsub = onSnapshot(q, async (snapshot) => {
+                const sponsorships = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+                const paidOnes = sponsorships.filter((s) =>
+                    ["paid", "complete", "completed", "active"].includes(String(s.paymentStatus || s.status || "").toLowerCase()) ||
+                    !!s.paidAt || !!s.transactionReference
+                );
+                const raised = paidOnes.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+                const sponsorIds = new Set(paidOnes.map((s) => s.sponsorId).filter(Boolean));
+                const count = sponsorIds.size;
+                
+                // Load sponsor names
+                const names = {};
+                const namePromises = [...sponsorIds].map(async (id) => {
+                    try {
+                        const snap = await getDoc(doc(db, "users", id));
+                        const d = snap.exists() ? snap.data() : {};
+                        names[id] = d.organisationName || d.organizationName || d.orgName || d.companyName || d.name || d.full_name || d.displayName || "Anonymous";
+                    } catch { names[id] = "Anonymous"; }
+                });
+                await Promise.all(namePromises);
+
+                setProjectSponsorships((prev) => ({
+                    ...prev,
+                    [project.id]: { raised, sponsorCount: count, sponsorNames: names, sponsorships: paidOnes },
+                }));
+            }, () => {});
+            unsubscribers.push(unsub);
+        });
+        return () => unsubscribers.forEach((u) => u());
+    }, [projects]);
 
     const handleOpenEditModal = (project) => {
         if (!project) return;
@@ -432,10 +473,14 @@ export default function NgoImpactScreen({ navigation }) {
                     ) : (
                         projects.map((project) => {
                             const goal = Number(project.goalAmount ?? project.fundingGoal ?? 0);
-                            const raised = Number(project.raisedAmount || 0);
+                            const sponsorData = projectSponsorships[project.id];
+                            const raisedFromSponsorships = sponsorData?.raised || 0;
+                            const raised = Math.max(Number(project.raisedAmount || 0), raisedFromSponsorships);
+                            const remaining = Math.max(goal - raised, 0);
                             const beneficiaryCount = Number(project.beneficiariesCount ?? project.beneficiaries ?? 0);
                             const ratio = goal > 0 ? Math.min(Math.max(raised / goal, 0), 1) : 0;
                             const percentText = `${Math.round(ratio * 100)}%`;
+                            const sponsorCount = sponsorData?.sponsorCount || 0;
 
                             const projectStatus = String(project.status || "active").toLowerCase();
                             const isCompleted = ["completed", "closed"].includes(projectStatus);
@@ -494,12 +539,17 @@ export default function NgoImpactScreen({ navigation }) {
 
                                     <View style={styles.progressValueRow}>
                                         <Text style={styles.raisedText}>
-                                            R{raised.toLocaleString("en-ZA")} raised
+                                            R{raised.toLocaleString("en-ZA")} of R{goal.toLocaleString("en-ZA")}
                                         </Text>
                                         <Text style={styles.goalText}>
-                                            {percentText} of R{goal.toLocaleString("en-ZA")}
+                                            · {sponsorCount} sponsor{sponsorCount !== 1 ? "s" : ""}
                                         </Text>
                                     </View>
+                                    {remaining > 0 && goal > 0 && (
+                                        <Text style={{ fontFamily: "Manrope_500Medium", fontSize: 11, color: COLORS.textSecondary, marginTop: 4 }}>
+                                            R{remaining.toLocaleString("en-ZA")} remaining to reach target
+                                        </Text>
+                                    )}
 
                                     <TouchableOpacity
                                         accessibilityRole="button"
@@ -513,7 +563,7 @@ export default function NgoImpactScreen({ navigation }) {
                                     <View style={styles.projectActions}>
                                         <TouchableOpacity
                                             style={styles.projectActionButton}
-                                            onPress={() => handleOpenEditModal(project)}
+                                            onPress={() => navigation.navigate("NGOUpdate", { projectId: project.id })}
                                             accessibilityRole="button"
                                             accessibilityLabel={`Update ${project.title || "project"}`}
                                         >

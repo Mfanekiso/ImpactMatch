@@ -38,6 +38,7 @@ import ProjectProgressScreen from "../screens/sponsors/ProjectProgressScreen";
 import NGOVerificationScreen from "../screens/ngo/NGOVerificationScreen";
 import PostUpdateScreen from "../screens/ngo/PostUpdateScreen";
 import NGOProjectDetailScreen from "../screens/ngo/NGOProjectDetailScreen";
+import NGOUpdateScreen from "../screens/ngo/NGOUpdateScreen";
 
 // Import the new Payment Verification screen
 import PaymentVerification from "../services/PaymentVerification";
@@ -220,6 +221,7 @@ export default function AppNavigator({ initialRouteName = "Welcome", initialRout
                 <Stack.Screen name="NGOVerification" component={NGOVerificationScreen} options={payScreenOptions("Verify organisation")} />
                 <Stack.Screen name="PostUpdate" component={PostUpdateScreen} options={payScreenOptions("Post an update")} />
                 <Stack.Screen name="NGOProjectDetail" component={NGOProjectDetailScreen} options={payScreenOptions("Project")} />
+                <Stack.Screen name="NGOUpdate" component={NGOUpdateScreen} options={payScreenOptions("Post an update")} />
                 
                 {/* Payment Verification Modal */}
                 <Stack.Screen 

@@ -31,12 +31,18 @@ import { formatCauses } from "../../utils/causes";
 import { deleteSponsorAccount } from "../../utils/deleteAccount";
 import { withCoordinates } from "../../utils/geocode";
 
-// Firebase imports
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+// Firebase imports (Removed firebase/storage)
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { removePushTokenForUser } from "../../utils/pushNotifications";
+import { cloudinaryDeliveryUrl, uploadToCloudinary } from "../../services/cloudinaryUpload";
+
+// ─── CLOUDINARY CONFIGURATION ──────────────────────────────────────────
+const uploadProfileImageToCloudinary = async (asset, uid) => {
+    const data = await uploadToCloudinary(asset, { folder: "impactmatch/profile_images", fallbackName: `sponsor_avatar_${uid}_${Date.now()}` });
+    return cloudinaryDeliveryUrl(data.secure_url, "f_auto,q_auto,w_400,h_400,c_fill");
+};
 
 // ─── LUXURY COLOR PALETTE (Sponsor Twist) ──────────────────────────────
 const COLORS = {
@@ -151,6 +157,8 @@ export default function SponsorProfileScreen({ navigation }) {
     }, [uid]);
 
     const handlePickImage = async () => {
+        if (!uid) return;
+
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
             Alert.alert("Permission Needed", "Allow photo access to upload a profile image.");
@@ -158,32 +166,47 @@ export default function SponsorProfileScreen({ navigation }) {
         }
 
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ["images"],
             allowsEditing: true,
             aspect: [1, 1],
-            quality: 0.7,
+            quality: 0.8,
         });
 
-        if (result.canceled) return;
+        if (result.canceled || !result.assets?.length) return;
 
         try {
             setUploading(true);
-            const uri = result.assets[0].uri;
-            const response = await fetch(uri);
-            const blob = await response.blob();
+            const asset = result.assets[0];
 
-            const storage = getStorage();
-            const imageRef = ref(storage, `profileImages/${uid}`);
-            await uploadBytes(imageRef, blob);
-            const downloadUrl = await getDownloadURL(imageRef);
+            // 1. Upload image to Cloudinary
+            const cloudinaryUrl = await uploadProfileImageToCloudinary(asset, uid);
 
+            // 2. Save Cloudinary URL to Firestore `users/{uid}`
             await updateDoc(doc(db, "users", uid), {
-                profileImageUrl: downloadUrl,
+                profileImageUrl: cloudinaryUrl,
+                photoURL: cloudinaryUrl,
+                logoUrl: cloudinaryUrl,
             });
 
-            setProfile((prev) => ({ ...prev, profileImageUrl: downloadUrl }));
+            // 3. Also sync with `publicProfiles/{uid}` so NGOs see the updated avatar
+            await setDoc(
+                doc(db, "publicProfiles", uid),
+                {
+                    profileImageUrl: cloudinaryUrl,
+                    photoURL: cloudinaryUrl,
+                    logoUrl: cloudinaryUrl,
+                },
+                { merge: true }
+            );
+
+            setProfile((prev) => ({
+                ...prev,
+                profileImageUrl: cloudinaryUrl,
+                photoURL: cloudinaryUrl,
+                logoUrl: cloudinaryUrl,
+            }));
         } catch (error) {
-            Alert.alert("Upload Failed", error.message);
+            Alert.alert("Upload Failed", error?.message || "Could not upload profile photo.");
         } finally {
             setUploading(false);
         }
@@ -192,14 +215,17 @@ export default function SponsorProfileScreen({ navigation }) {
     const handleSaveProfile = async (updatedProfile) => {
         if (!uid) return;
         try {
-            await updateDoc(doc(db, "users", uid), await withCoordinates({
+            const payload = await withCoordinates({
                 organisationName: updatedProfile.orgName,
                 email: updatedProfile.email,
                 phone: updatedProfile.phone,
                 website: updatedProfile.website,
                 location: updatedProfile.location,
                 description: updatedProfile.description,
-            }));
+            });
+
+            await updateDoc(doc(db, "users", uid), payload);
+            await setDoc(doc(db, "publicProfiles", uid), payload, { merge: true });
 
             setProfile((prev) => ({
                 ...prev,
@@ -215,6 +241,7 @@ export default function SponsorProfileScreen({ navigation }) {
         if (!uid) return;
         try {
             await updateDoc(doc(db, "users", uid), { industry, fundingBudget });
+            await setDoc(doc(db, "publicProfiles", uid), { industry, fundingBudget }, { merge: true });
             setProfile((prev) => ({ ...prev, industry, fundingBudget }));
             setAccountDetailsVisible(false);
         } catch (error) {
@@ -226,6 +253,7 @@ export default function SponsorProfileScreen({ navigation }) {
         if (!uid) return;
         try {
             await updateDoc(doc(db, "users", uid), { preferredCauses: causes });
+            await setDoc(doc(db, "publicProfiles", uid), { preferredCauses: causes }, { merge: true });
             setProfile((prev) => ({ ...prev, preferredCauses: causes }));
             setCausesVisible(false);
         } catch (error) {
