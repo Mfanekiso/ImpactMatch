@@ -55,8 +55,16 @@ export default function SponsorPaymentScreen({ route, navigation }) {
   // Listen in real-time to payment doc and sponsorship doc
   useEffect(() => {
     if (!sponsorshipId || !userReady) return undefined;
-    const unsubPayment = onSnapshot(query(collection(db, "payments"), where("sponsorshipId", "==", sponsorshipId)), (snapshot) => {
-      const paymentData = snapshot.docs.map((item) => item.data()).sort((a, b) => (b.paidAt?.seconds || 0) - (a.paidAt?.seconds || 0))[0];
+    const user = auth.currentUser;
+    if (!user) return undefined;
+    const unsubPayment = onSnapshot(query(
+      collection(db, "payments"),
+      where("sponsorshipId", "==", sponsorshipId),
+      where("sponsorId", "==", user.uid)
+    ), (snapshot) => {
+      const paymentData = snapshot.docs
+        .map((item) => item.data())
+        .sort((a, b) => (b.paidAt?.seconds || 0) - (a.paidAt?.seconds || 0))[0];
       if (paymentData) setPayment((previous) => ({ ...previous, ...paymentData }));
     }, (error) => {
       console.warn("Could not listen for payment status:", error?.message);

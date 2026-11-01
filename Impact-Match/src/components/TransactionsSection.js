@@ -17,7 +17,8 @@ const DEFAULT_PALETTE = {
 };
 
 const money = (value) => {
-  const n = Number(value) || 0;
+  // Sponsorship and payment amounts are stored in cents in Firestore.
+  const n = (Number(value) || 0) / 100;
   const whole = Number.isInteger(n);
   return `R${n.toLocaleString("en-ZA", {
     minimumFractionDigits: whole ? 0 : 2,
