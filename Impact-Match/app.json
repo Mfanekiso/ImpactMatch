@@ -1,24 +1,34 @@
+
 {
   "expo": {
     "name": "ImpactMatch",
     "slug": "ImpactMatch",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/splash.jpeg",
+    "icon": "./assets/impactmatch-logo.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.jpeg",
-      "resizeMode": "contain",
-      "backgroundColor": "#F8F6EE"
-    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/splash.jpeg",
+        "foregroundImage": "./assets/impactmatch-logo.png",
         "backgroundColor": "#F8F6EE"
       }
-    }
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/impactmatch-logo.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F8F6EE"
+        }
+      ]
+    ]
   }
 }
