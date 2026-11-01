@@ -21,7 +21,10 @@ export function AuthProvider({ children }) {
             }
             try {
                 const snap = await getDoc(doc(db, "users", firebaseUser.uid));
-                setRole(snap.exists() ? snap.data().role ?? null : null);
+                const data = snap.exists() ? snap.data() : null;
+                // A deactivated admin has no admin access.
+                const suspended = data?.accountStatus === "suspended";
+                setRole(suspended ? null : data?.role ?? null);
             } catch {
                 setRole(null);
             }
