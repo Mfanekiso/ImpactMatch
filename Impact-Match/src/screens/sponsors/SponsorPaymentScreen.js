@@ -185,7 +185,8 @@ export default function SponsorPaymentScreen({ route, navigation }) {
       </ScrollView>
 
       <View style={styles.bottom}>
-        {paid ? (
+        {paid ? 
+        (
           <TouchableOpacity style={styles.doneButton} onPress={goToDashboard} accessibilityRole="button">
             <Text style={styles.payButtonText}>View Impact Dashboard</Text>
           </TouchableOpacity>
