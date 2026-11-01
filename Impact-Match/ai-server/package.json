@@ -1,0 +1,11 @@
+{
+  "name": "impact-match-ai-server",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "jose": "^5.9.6"
+  }
+}

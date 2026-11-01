@@ -18,9 +18,10 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 
 // Firebase imports
 import CauseChips from "../../components/sponsors/CauseChips";
-import { parseAmount } from "../../utils/matchScore";
+import { parseAmount, REPORTING_GOALS, SDG_OPTIONS } from "../../utils/matchScore";
 import { cacheProfile } from "../../utils/profileCache";
 import { writeFirestoreOrQueue } from "../../utils/offlineWrites";
+import { withCoordinates } from "../../utils/geocode";
 
 const COLORS = {
     background: "#FFFFFF",
@@ -44,6 +45,8 @@ export default function SponsorSetupScreen({ route, navigation }) {
     const [location, setLocation] = useState("");
     const [fundingBudget, setFundingBudget] = useState("");
     const [preferredCauses, setPreferredCauses] = useState([]); // array of cause names
+    const [reportingGoals, setReportingGoals] = useState([]); // CSR / B-BBEE reporting goals (optional)
+    const [sdgFocus, setSdgFocus] = useState([]); // UN SDGs the sponsor reports on (optional)
     const [focusedField, setFocusedField] = useState(null);
     const [saving, setSaving] = useState(false);
 
@@ -78,15 +81,17 @@ export default function SponsorSetupScreen({ route, navigation }) {
         setSaving(true);
         try {
             // 3. Update the existing document in the "users" collection
-            const profile = {
+            const profile = await withCoordinates({
                 role: role,
                 organisationName: organisationName,
                 industry: industry,
                 location: location,
                 fundingBudget: budgetNumber,
                 preferredCauses: preferredCauses,
-                profileCompleted: true // Flag to indicate profile setup is done
-            };
+                reportingGoals: reportingGoals,
+                sdgFocus: sdgFocus,
+                profileCompleted: true, // Flag to indicate profile setup is done
+            });
             await writeFirestoreOrQueue("users", uid, profile);
             await cacheProfile(uid, profile);
 
@@ -279,6 +284,18 @@ export default function SponsorSetupScreen({ route, navigation }) {
                                     selected={preferredCauses}
                                     onChange={setPreferredCauses}
                                 />
+                            </View>
+
+                            {/* CSR / ESG reporting goals (optional, used for CSR/ESG match score) */}
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>REPORTING GOALS (OPTIONAL)</Text>
+                                <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 8 }}>What should your CSI spend help you report on?</Text>
+                                <CauseChips options={REPORTING_GOALS} selected={reportingGoals} onChange={setReportingGoals} />
+                            </View>
+
+                            <View style={styles.fieldWrapper}>
+                                <Text style={styles.fieldLabel}>SDG FOCUS (OPTIONAL)</Text>
+                                <CauseChips options={SDG_OPTIONS} selected={sdgFocus} onChange={setSdgFocus} />
                             </View>
 
                             {/* Create Profile Button */}

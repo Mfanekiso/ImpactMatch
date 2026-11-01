@@ -12,7 +12,6 @@
 // Cloud Function) so users cannot read each other's tokens.
 
 import { Platform } from "react-native";
-import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 
@@ -22,19 +21,39 @@ import { navigationRef } from "../navigation/navigationRef";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 let currentDeviceToken = null;
 
-// Show notifications as banners even while the app is open.
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-    }),
-});
+// Expo Go on Android does not include push notifications (SDK 53+), and
+// importing expo-notifications there crashes the app. So the module is loaded
+// only when it is supported. Sending still works from anywhere.
+const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
+const PUSH_SUPPORTED = Platform.OS !== "web" && !(Platform.OS === "android" && IS_EXPO_GO);
+let Notifications = null;
+
+function getNotifications() {
+    if (!PUSH_SUPPORTED) return null;
+    if (!Notifications) {
+        try {
+            Notifications = require("expo-notifications");
+            // Show notifications as banners even while the app is open.
+            Notifications.setNotificationHandler({
+                handleNotification: async () => ({
+                    shouldShowBanner: true,
+                    shouldShowList: true,
+                    shouldPlaySound: true,
+                    shouldSetBadge: false,
+                }),
+            });
+        } catch (error) {
+            console.log("Push: notifications not available in this build:", error?.message);
+            Notifications = null;
+        }
+    }
+    return Notifications;
+}
 
 // Ask permission and return this device's Expo push token (or null).
 export async function registerForPushNotificationsAsync() {
-    if (Platform.OS === "web") return null; // Expo push is for Android and iOS
+    const Notifications = getNotifications();
+    if (!Notifications) return null; // web, or Expo Go on Android
 
     if (Platform.OS === "android") {
         // A channel must exist before the Android 13+ permission prompt appears
@@ -147,7 +166,8 @@ function openFromNotification(data, attempt = 0) {
 
 // Listen for taps. Returns a clean-up function for useEffect.
 export function listenForNotificationTaps() {
-    if (Platform.OS === "web") return () => {};
+    const Notifications = getNotifications();
+    if (!Notifications) return () => {};
 
     // The app was opened by tapping a notification
     const last = Notifications.getLastNotificationResponse?.();

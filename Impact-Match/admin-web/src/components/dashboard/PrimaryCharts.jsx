@@ -9,7 +9,7 @@ function Card({ title, children }) {
     return <section className="chart-card"><h2>{title}</h2>{children}</section>;
 }
 
-export default function PrimaryCharts({ users = [], projects = [] }) {
+export default function PrimaryCharts({ users = [], payments = [] }) {
     const activityData = useMemo(() => {
         const days = Array.from({ length: 7 }, (_, index) => {
             const date = new Date();
@@ -35,14 +35,14 @@ export default function PrimaryCharts({ users = [], projects = [] }) {
             date.setMonth(date.getMonth() - (5 - index));
             return { name: monthLabel(date), key: monthKey(date), amount: 0 };
         });
-        projects.forEach((project) => {
-            const date = toDate(project.updatedAt ?? project.createdAt);
+        payments.filter((payment) => payment.status === "complete").forEach((payment) => {
+            const date = toDate(payment.paidAt);
             if (!date || Number.isNaN(date.getTime())) return;
             const month = months.find((item) => item.key === monthKey(date));
-            if (month) month.amount += Number(project.raisedAmount) || 0;
+            if (month) month.amount += Number(payment.sponsorshipAmount) || 0;
         });
         return months;
-    }, [projects]);
+    }, [payments]);
 
     const hasActivity = activityData.some((item) => item.users > 0);
     const hasFunding = fundingData.some((item) => item.amount > 0);

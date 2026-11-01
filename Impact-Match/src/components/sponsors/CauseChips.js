@@ -13,9 +13,11 @@ const COLORS = {
 };
 
 // Multi-select chips. `selected` is an array of cause names, `onChange` gets the new array.
-export default function CauseChips({ selected = [], onChange }) {
+export default function CauseChips({ selected = [], onChange, options = CAUSE_OPTIONS, single = false }) {
     const toggle = (cause) => {
-        if (selected.includes(cause)) {
+        if (single) {
+            onChange(selected.includes(cause) ? [] : [cause]);
+        } else if (selected.includes(cause)) {
             onChange(selected.filter((c) => c !== cause));
         } else {
             onChange([...selected, cause]);
@@ -24,7 +26,7 @@ export default function CauseChips({ selected = [], onChange }) {
 
     return (
         <View style={styles.wrap}>
-            {CAUSE_OPTIONS.map((cause) => {
+            {options.map((cause) => {
                 const active = selected.includes(cause);
                 return (
                     <TouchableOpacity

@@ -29,6 +29,7 @@ import DeleteAccountModal from "../../components/sponsors/DeleteAccountModal";
 import { parseAmount } from "../../utils/matchScore";
 import { formatCauses } from "../../utils/causes";
 import { deleteSponsorAccount } from "../../utils/deleteAccount";
+import { withCoordinates } from "../../utils/geocode";
 
 // Firebase imports
 import { doc, getDoc, updateDoc } from "firebase/firestore";
@@ -191,14 +192,14 @@ export default function SponsorProfileScreen({ navigation }) {
     const handleSaveProfile = async (updatedProfile) => {
         if (!uid) return;
         try {
-            await updateDoc(doc(db, "users", uid), {
+            await updateDoc(doc(db, "users", uid), await withCoordinates({
                 organisationName: updatedProfile.orgName,
                 email: updatedProfile.email,
                 phone: updatedProfile.phone,
                 website: updatedProfile.website,
                 location: updatedProfile.location,
                 description: updatedProfile.description,
-            });
+            }));
 
             setProfile((prev) => ({
                 ...prev,

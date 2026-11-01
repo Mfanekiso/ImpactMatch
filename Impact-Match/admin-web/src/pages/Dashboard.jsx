@@ -21,6 +21,7 @@ export default function Dashboard() {
     const { user: currentUser } = useAuth();
     const [users, setUsers] = useState([]);
     const [projects, setProjects] = useState([]);
+    const [payments, setPayments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [query, setQuery] = useState("");
@@ -28,11 +29,16 @@ export default function Dashboard() {
 
     useEffect(() => {
         let mounted = true;
-        Promise.all([listUsers(), getDocs(collection(db, "projects"))])
-            .then(([nextUsers, projectSnapshot]) => {
+        Promise.all([
+            listUsers(),
+            getDocs(collection(db, "projects")),
+            getDocs(collection(db, "payments")),
+        ])
+            .then(([nextUsers, projectSnapshot, paymentSnapshot]) => {
                 if (!mounted) return;
                 setUsers(nextUsers);
                 setProjects(projectSnapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+                setPayments(paymentSnapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
             })
             .catch((e) => mounted && setError(friendlyError(e)))
             .finally(() => mounted && setLoading(false));
@@ -42,9 +48,11 @@ export default function Dashboard() {
     const stats = useMemo(() => ({
         sponsors: users.filter((user) => user.role === "sponsor").length,
         ngos: users.filter((user) => user.role === "ngo").length,
-        sponsored: projects.reduce((sum, project) => sum + (Number(project.raisedAmount) || 0), 0),
-        generated: projects.reduce((sum, project) => sum + (Number(project.revenueGenerated ?? project.platformRevenue) || 0), 0),
-    }), [users, projects]);
+        sponsored: payments.filter((payment) => payment.status === "complete")
+            .reduce((sum, payment) => sum + (Number(payment.sponsorshipAmount) || 0), 0),
+        generated: payments.filter((payment) => payment.status === "complete")
+            .reduce((sum, payment) => sum + (Number(payment.platformFeeAmount) || 0), 0),
+    }), [users, payments]);
 
     const visibleUsers = useMemo(() => {
         const term = query.trim().toLowerCase();
@@ -91,12 +99,58 @@ export default function Dashboard() {
             <div className="dashboard-stats">
                 <StatCard title="Total Sponsors" value={stats.sponsors} />
                 <StatCard title="Total NGOs" value={stats.ngos} />
-                <StatCard title="Revenue Sponsored" value={formatCurrencyShort(stats.sponsored, "R")} />
-                <StatCard title="Revenue Generated" value={formatCurrencyShort(stats.generated, "R")} />
+                <StatCard title="Funds Sponsored" value={formatCurrencyShort(stats.sponsored, "R")} />
+                <StatCard title="Platform Fees" value={formatCurrencyShort(stats.generated, "R")} />
             </div>
 
-            <PrimaryCharts users={users} projects={projects} />
+            <PrimaryCharts users={users} payments={payments} />
             <SecondaryCharts projects={projects} />
+
+            <section className="card dashboard-users" style={{ marginBottom: 24 }}>
+                <div className="section-heading">
+                    <div><h2>Recent Sponsorship Payments</h2><p className="sub">Transactions recorded through the Sponsor Payment API</p></div>
+                    <span className="user-count">{payments.length} Payments</span>
+                </div>
+                <div className="table-wrap dashboard-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th>Sponsor</th>
+                                <th>NGO</th>
+                                <th>Amount</th>
+                                <th>Gateway</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {payments.length === 0 && (
+                                <tr><td colSpan={7} className="empty">No payments recorded yet.</td></tr>
+                            )}
+                            {payments.map((pmt) => {
+                                const date = dateValue(pmt.paidAt ?? pmt.createdAt);
+                                const dateStr = date ? date.toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" }) : "Recently";
+                                return (
+                                    <tr key={pmt.id}>
+                                        <td><strong>{pmt.projectTitle || "Project sponsorship"}</strong></td>
+                                        <td>{pmt.sponsorName || "Sponsor"}</td>
+                                        <td>{pmt.ngoName || "NGO"}</td>
+                                        <td><strong>R{Number(pmt.sponsorshipAmount || 0).toLocaleString("en-ZA")}</strong></td>
+                                        <td><span className="meta">{pmt.provider || "PayFast API"}</span></td>
+                                        <td>
+                                            <span className={`account-status ${pmt.status === "complete" ? "active" : "suspended"}`}>
+                                                {pmt.status === "complete" ? "Confirmed" : (pmt.status || "Pending")}
+                                            </span>
+                                        </td>
+                                        <td><span className="meta">{dateStr}</span></td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
             <section className="card dashboard-users">
                 <div className="section-heading">

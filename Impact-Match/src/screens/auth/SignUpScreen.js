@@ -153,7 +153,7 @@ export default function SignUpScreen({ navigation }) {
                             <Text style={styles.title}>Create Account</Text>
 
                             <Text style={styles.subtitle}>
-                                Join EcoImpact and start making a difference.
+                                Join ImpactMatch and start making a difference.
                             </Text>
                         </View>
 

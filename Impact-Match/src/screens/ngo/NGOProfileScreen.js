@@ -37,6 +37,7 @@ import {
 import { auth, db } from "../../../Backend/firebaseConfig";
 import { removePushTokenForUser } from "../../utils/pushNotifications";
 import { cacheProfile } from "../../utils/profileCache";
+import { withCoordinates } from "../../utils/geocode";
 
 // ─── LUXURY COLOR PALETTE ───────────────────────────────────────────────
 const COLORS = {
@@ -212,8 +213,9 @@ export default function NGOProfileScreen({ navigation }) {
                 await reauthenticateWithCredential(user, credential);
                 await updateEmail(user, updated.email);
             }
-            await updateDoc(doc(db, "users", user.uid), updated);
-            const nextProfile = { ...profile, ...updated };
+            const located = await withCoordinates(updated);
+            await updateDoc(doc(db, "users", user.uid), located);
+            const nextProfile = { ...profile, ...located };
             setProfile(nextProfile);
             await cacheProfile(user.uid, nextProfile);
             setEditVisible(false);
@@ -383,6 +385,14 @@ export default function NGOProfileScreen({ navigation }) {
                     }}>
                         <Ionicons name="lock-closed-outline" size={18} color={COLORS.textPrimary} />
                         <Text style={styles.profileActionSecondaryText}>Change password</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.passwordActionButton}
+                        activeOpacity={0.85}
+                        onPress={() => navigation.navigate("NGOVerification")}
+                    >
+                        <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.textPrimary} />
+                        <Text style={styles.profileActionSecondaryText}>Verify organisation</Text>
                     </TouchableOpacity>
                 </View>
 
