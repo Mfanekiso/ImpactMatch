@@ -318,7 +318,10 @@ export default function SponsorHomeScreen({ navigation, route }) {
                         {topMatch.targetCommunity ? (
                             <View style={styles.tagsRow}>
                                 <View style={styles.tagPill}>
-                                    <Text style={styles.tagPillText}>{topMatch.targetCommunity}</Text>
+                                    {/* CHANGED: one line with "…" so the pill stays inside the card */}
+                                    <Text style={styles.tagPillText} numberOfLines={1} ellipsizeMode="tail">
+                                        {topMatch.targetCommunity}
+                                    </Text>
                                 </View>
                             </View>
                         ) : null}
@@ -586,7 +589,8 @@ const styles = StyleSheet.create({
     orgName: { 
         fontFamily: "Manrope_700Bold",
         fontSize: 20, 
-        color: COLORS.textPrimary 
+        color: COLORS.textPrimary,
+        flexShrink: 1, // CHANGED: long names wrap instead of overflowing
     },
     verifiedIcon: { marginLeft: 6 },
     locationRow: { 
@@ -613,6 +617,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 12,
+        maxWidth: "100%", // CHANGED: pill can never be wider than the card
     },
     tagPillText: { 
         fontFamily: "Manrope_600SemiBold",
