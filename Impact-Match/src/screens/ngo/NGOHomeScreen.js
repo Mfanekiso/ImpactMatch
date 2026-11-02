@@ -153,9 +153,11 @@ export default function NGOHomeScreen({ navigation, route }) {
                     </View>
 
                     <View style={styles.headerActions}>
-                        <TouchableOpacity style={styles.bellButton} activeOpacity={0.7}>
-                            <Ionicons name="notifications-outline" size={20} color={COLORS.ivory} />
-                        </TouchableOpacity>
+
+                        {/* <TouchableOpacity style={styles.bellButton} activeOpacity={0.7}> */}
+                            {/* <Ionicons name="notifications-outline" size={20} color={COLORS.ivory} /> */}
+                        {/* </TouchableOpacity> */}
+                        
                         <TouchableOpacity style={styles.profileButton} activeOpacity={0.7} accessibilityLabel="Open profile" onPress={() => navigation.navigate("NGOProfile")}>
                             {profileImageUrl ? <Image source={{ uri: profileImageUrl }} style={styles.profileImage} /> : <Ionicons name="person-circle-outline" size={23} color={COLORS.ivory} />}
                         </TouchableOpacity>

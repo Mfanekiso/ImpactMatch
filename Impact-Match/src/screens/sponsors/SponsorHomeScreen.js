@@ -228,10 +228,11 @@ export default function SponsorHomeScreen({ navigation, route }) {
                     </View>
 
                     <View style={styles.headerActions}>
-                        <TouchableOpacity style={styles.bellButton} activeOpacity={0.7}>
-                            <Ionicons name="notifications-outline" size={20} color={COLORS.textPrimary} />
-                            <View style={styles.bellDot} />
-                        </TouchableOpacity>
+
+                        {/* <TouchableOpacity style={styles.bellButton} activeOpacity={0.7}> */}
+                            {/* <Ionicons name="notifications-outline" size={20} color={COLORS.textPrimary} /> */}
+                            {/* <View style={styles.bellDot} /> */}
+                        {/* </TouchableOpacity>  */}
 
                         <TouchableOpacity
                             style={styles.avatar}

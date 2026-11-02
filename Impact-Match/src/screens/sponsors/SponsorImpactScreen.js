@@ -92,6 +92,7 @@ export default function ImpactDashboardScreen({ navigation }) {
   const [projectsLoading, setProjectsLoading] = React.useState(true);
   const [projectsError, setProjectsError] = React.useState(false);
   const [interests, setInterests] = React.useState([]);
+  const [raisedByProject, setRaisedByProject] = React.useState({});
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -154,6 +155,27 @@ export default function ImpactDashboardScreen({ navigation }) {
 
   const scoped = React.useMemo(() => selectPartnerProjects(projects, interests), [projects, interests]);
   const myProjects = scoped.projects;
+
+  useEffect(() => {
+    setRaisedByProject({});
+    const unsubscribes = myProjects.map((project) => onSnapshot(
+      query(collection(db, "sponsorships"), where("projectId", "==", project.id)),
+      (snapshot) => {
+        const raisedCents = snapshot.docs.reduce((sum, sponsorshipDoc) => {
+          const sponsorship = sponsorshipDoc.data();
+          const status = String(sponsorship.paymentStatus || sponsorship.status || "").toLowerCase();
+          const paid = ["paid", "complete", "completed", "active"].includes(status) ||
+            !!sponsorship.paidAt || !!sponsorship.transactionReference;
+          return sum + (paid ? Number(sponsorship.amount) || 0 : 0);
+        }, 0);
+        setRaisedByProject((current) => ({ ...current, [project.id]: raisedCents / 100 }));
+      },
+      (error) => console.warn("Could not load project sponsorship totals:", error?.message)
+    ));
+
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }, [myProjects]);
+
   const beneficiarySeries = React.useMemo(() => beneficiariesByMonth(myProjects, 6), [myProjects]);
   const beneficiaryMax = Math.max(1, ...beneficiarySeries.map((p) => p.value));
   const growth = growthPercent(beneficiarySeries);
@@ -305,8 +327,7 @@ export default function ImpactDashboardScreen({ navigation }) {
             </View>
           ) : myProjects.map((project) => {
             const goal = Number(project.fundingGoal ?? project.goalAmount) || 0;
-            const raised = Number(project.raisedAmount) || 0;
-            // const raised = paidSponsorships.reduce((sum, sponsorship) => sum + (Number(sponsorship.amount) || 0) / 100, 0);
+            const raised = raisedByProject[project.id] ?? projectRaised(project);
             const ratio = goal > 0 ? Math.min(raised / goal, 1) : 0;
             const beneficiaryCount = Number(project.beneficiariesCount ?? project.beneficiaries) || 0;
             const status = project.status || "Active";
@@ -369,7 +390,7 @@ export default function ImpactDashboardScreen({ navigation }) {
               </View>
 
               <View style={styles.progressValueRow}>
-                <Text style={styles.raisedText}>R{raised.toLocaleString("en-ZA")} raised</Text>
+                <Text style={styles.raisedText}>R{raised.toLocaleString("en-ZA", { maximumFractionDigits: 2 })} raised</Text>
                 <Text style={styles.goalText}>
                   {Math.round(ratio * 100)}% of R{goal.toLocaleString("en-ZA")}
                 </Text>

@@ -1,10 +1,10 @@
-
 import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     ScrollView,
     StatusBar,
@@ -48,6 +48,7 @@ export default function CreateOpportunityScreen({ navigation }) {
     const [beneficiaries, setBeneficiaries] = useState("");
     const [deadline, setDeadline] = useState("");
     const [saving, setSaving] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     const handleCreate = async () => {
         const user = auth.currentUser;
@@ -154,16 +155,8 @@ export default function CreateOpportunityScreen({ navigation }) {
             // Save directly to Firestore
             await setDoc(projectRef, project);
 
-            Alert.alert(
-                "Project published",
-                "Your project has been saved successfully.",
-                [
-                    {
-                        text: "Done",
-                        onPress: () => navigation.goBack(),
-                    },
-                ]
-            );
+            // Show the success modal
+            setShowSuccessModal(true);
         } catch (error) {
             console.error("Project creation failed:", error);
 
@@ -177,12 +170,57 @@ export default function CreateOpportunityScreen({ navigation }) {
         }
     };
 
+    const handleDone = () => {
+        setShowSuccessModal(false);
+        navigation.goBack();
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar
                 barStyle="dark-content"
                 backgroundColor={COLORS.bg}
             />
+
+            {/* Project created modal */}
+            <Modal
+                visible={showSuccessModal}
+                transparent
+                animationType="fade"
+                onRequestClose={handleDone}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <View style={styles.modalIconCircle}>
+                            <Ionicons
+                                name="checkmark"
+                                size={36}
+                                color="#FFFFFF"
+                            />
+                        </View>
+
+                        <Text style={styles.modalTitle}>
+                            Project Created!
+                        </Text>
+
+                        <Text style={styles.modalMessage}>
+                            {title.trim()
+                                ? `"${title.trim()}" is now live and visible to sponsors.`
+                                : "Your project is now live and visible to sponsors."}
+                        </Text>
+
+                        <TouchableOpacity
+                            style={styles.modalButton}
+                            activeOpacity={0.85}
+                            onPress={handleDone}
+                        >
+                            <Text style={styles.modalButtonText}>
+                                Done
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
@@ -447,6 +485,64 @@ const styles = StyleSheet.create({
     },
 
     submitText: {
+        color: "#FFFFFF",
+        fontWeight: "800",
+        fontSize: 15,
+    },
+
+    /* Success modal */
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(67, 51, 39, 0.5)",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+    },
+
+    modalCard: {
+        width: "100%",
+        maxWidth: 360,
+        backgroundColor: COLORS.card,
+        borderRadius: 24,
+        padding: 28,
+        alignItems: "center",
+    },
+
+    modalIconCircle: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: COLORS.green,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 18,
+    },
+
+    modalTitle: {
+        color: COLORS.ink,
+        fontWeight: "800",
+        fontSize: 20,
+        marginBottom: 8,
+    },
+
+    modalMessage: {
+        color: COLORS.muted,
+        fontSize: 14,
+        lineHeight: 20,
+        textAlign: "center",
+        marginBottom: 24,
+    },
+
+    modalButton: {
+        width: "100%",
+        minHeight: 50,
+        borderRadius: 14,
+        backgroundColor: COLORS.green,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    modalButtonText: {
         color: "#FFFFFF",
         fontWeight: "800",
         fontSize: 15,

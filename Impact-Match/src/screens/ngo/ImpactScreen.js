@@ -236,7 +236,10 @@ export default function NgoImpactScreen({ navigation }) {
                     ["paid", "complete", "completed", "active"].includes(String(s.paymentStatus || s.status || "").toLowerCase()) ||
                     !!s.paidAt || !!s.transactionReference
                 );
-                const raised = paidOnes.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+                // CHANGED: sponsorship amounts are stored in cents, so divide by 100 to get rands
+                // (same calculation as the sponsor Impact screen)
+                const raisedCents = paidOnes.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+                const raised = raisedCents / 100;
                 const sponsorIds = new Set(paidOnes.map((s) => s.sponsorId).filter(Boolean));
                 const count = sponsorIds.size;
                 
@@ -392,9 +395,15 @@ export default function NgoImpactScreen({ navigation }) {
         setDeletePhase("confirm");
     };
 
-    const totalRaised = projects.reduce((total, project) => total + (Number(project.raisedAmount) || 0), 0);
-    const totalPaymentsReceived = transactions.reduce((sum, t) => sum + t.amount, 0);
-    const displayTotalRaised = Math.max(totalRaised, totalPaymentsReceived);
+    // CHANGED: one helper so the cards and the summary use the same raised amount
+    // (sponsorship total in rands once loaded, otherwise the project's raisedAmount)
+    const getProjectRaised = (project) => {
+        const sponsorData = projectSponsorships[project.id];
+        return sponsorData ? sponsorData.raised : Number(project.raisedAmount) || 0;
+    };
+
+    // CHANGED: total raised is now the sum of the per-project amounts above
+    const displayTotalRaised = projects.reduce((total, project) => total + getProjectRaised(project), 0);
 
     const totalBeneficiaries = projects.reduce((total, project) => total + (Number(project.beneficiariesCount ?? project.beneficiaries) || 0), 0);
     const totalActiveProjects = projects.filter((project) =>
@@ -402,7 +411,7 @@ export default function NgoImpactScreen({ navigation }) {
     ).length;
 
     const SUMMARY_STATS = [
-        { id: "1", label: "Raised", value: `R${displayTotalRaised.toLocaleString("en-ZA")}`, bgColor: COLORS.primarySoft, color: COLORS.primary },
+        { id: "1", label: "Raised", value: `R${displayTotalRaised.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}`, bgColor: COLORS.primarySoft, color: COLORS.primary },
         { id: "2", label: "Active", value: String(totalActiveProjects), bgColor: COLORS.emeraldSoft, color: COLORS.emerald },
         { id: "3", label: "Total Proj.", value: String(projects.length), bgColor: COLORS.surface, color: COLORS.textPrimary, border: COLORS.border },
         { id: "4", label: "Payments", value: String(transactions.length), bgColor: COLORS.buttonDarkSoft, color: COLORS.buttonDark },
@@ -474,8 +483,8 @@ export default function NgoImpactScreen({ navigation }) {
                         projects.map((project) => {
                             const goal = Number(project.goalAmount ?? project.fundingGoal ?? 0);
                             const sponsorData = projectSponsorships[project.id];
-                            const raisedFromSponsorships = sponsorData?.raised || 0;
-                            const raised = Math.max(Number(project.raisedAmount || 0), raisedFromSponsorships);
+                            // CHANGED: same logic as the sponsor screen (sponsorship total in rands)
+                            const raised = getProjectRaised(project);
                             const remaining = Math.max(goal - raised, 0);
                             const beneficiaryCount = Number(project.beneficiariesCount ?? project.beneficiaries ?? 0);
                             const ratio = goal > 0 ? Math.min(Math.max(raised / goal, 0), 1) : 0;
@@ -539,7 +548,7 @@ export default function NgoImpactScreen({ navigation }) {
 
                                     <View style={styles.progressValueRow}>
                                         <Text style={styles.raisedText}>
-                                            R{raised.toLocaleString("en-ZA")} of R{goal.toLocaleString("en-ZA")}
+                                            R{raised.toLocaleString("en-ZA", { maximumFractionDigits: 2 })} of R{goal.toLocaleString("en-ZA")}
                                         </Text>
                                         <Text style={styles.goalText}>
                                             · {sponsorCount} sponsor{sponsorCount !== 1 ? "s" : ""}
@@ -547,7 +556,7 @@ export default function NgoImpactScreen({ navigation }) {
                                     </View>
                                     {remaining > 0 && goal > 0 && (
                                         <Text style={{ fontFamily: "Manrope_500Medium", fontSize: 11, color: COLORS.textSecondary, marginTop: 4 }}>
-                                            R{remaining.toLocaleString("en-ZA")} remaining to reach target
+                                            R{remaining.toLocaleString("en-ZA", { maximumFractionDigits: 2 })} remaining to reach target
                                         </Text>
                                     )}
 

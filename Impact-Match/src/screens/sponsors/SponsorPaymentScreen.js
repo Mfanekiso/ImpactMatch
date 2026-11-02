@@ -118,8 +118,9 @@ export default function SponsorPaymentScreen({ route, navigation }) {
       } else {
         await Linking.openURL(payfastUrl);
       }
+      // The spinner stays on while the user is sent to PayFast.
+      // It is only turned off if there is an error, or when the app becomes active again.
       setCheckoutOpened(true);
-      setProcessingPayment(false);
     } catch (error) {
       setProcessingPayment(false);
       console.error("Payment Link Error:", error);
